@@ -46,6 +46,7 @@
 #include <tvm/tirx/transform.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <sstream>
 #include <string>
 #include <unordered_set>
@@ -339,6 +340,17 @@ struct ThreadedTraceApply {
                                     /*error_render_level=*/
                                     s_tir::ScheduleErrorRenderLevel::kNone);
       trace->ApplyToSchedule(sch, /*remove_postproc=*/true);
+      // ── Constraint-guided upward pruning (Plan C §3.4) ──
+      // Reject a candidate before the expensive postproc chain when a
+      // reduction-loop tile has a middle factor of 1. Under the "SSSRRSRS"
+      // MultiLevelTiling structure that makes RewriteCooperativeFetch hoist the
+      // shared-memory buffer up to the whole-matrix level, which VerifyGPUCode
+      // then rejects. Gated on TVM_PRUNE_MODE so that the baseline and the
+      // pruning arm share one binary: 0 = off (upstream behaviour), 1 = on.
+      if (PruneMode() >= 1 && RejectByReductionTile(sch)) {
+        this->prune_fail_counter_++;
+        return std::nullopt;
+      }
       sch->EnterPostproc();
     } catch (const s_tir::ScheduleError& e) {
       TVM_PY_LOG(WARNING, nullptr) << "Trace replay failed with ScheduleError: " << e.what();
@@ -375,7 +387,8 @@ struct ThreadedTraceApply {
   /*! \brief Returns a string summarizing the failures on each postprocessor */
   std::string SummarizeFailures() const {
     std::ostringstream os;
-    os << "Trace replay failures: " << this->trace_fail_counter_.load() << " failure(s)";
+    os << "Trace replay failures: " << this->trace_fail_counter_.load() << " failure(s)"
+       << "\nPruning rejections: " << this->prune_fail_counter_.load() << " candidate(s)";
     if (n_ > 0) {
       os << "\n";
     }
@@ -393,6 +406,9 @@ struct ThreadedTraceApply {
   /*! \brief Returns the number of trace replay failures. */
   int TraceFailCount() const { return this->trace_fail_counter_.load(); }
 
+  /*! \brief Returns the number of candidates rejected by constraint-guided pruning. */
+  int PruneFailCount() const { return this->prune_fail_counter_.load(); }
+
  private:
   /*! \brief A helper data structure that stores the fail count for each postprocessor. */
   struct Item {
@@ -402,10 +418,57 @@ struct ThreadedTraceApply {
     std::atomic<int> fail_counter{0};
   };
 
+  /*!
+   * \brief The constraint-guided pruning mode, read once from TVM_PRUNE_MODE
+   * \return 0 to disable pruning (upstream behaviour), 1 to enable the
+   * reduction-tile rule
+   */
+  static int PruneMode() {
+    static const int mode = []() {
+      const char* env = std::getenv("TVM_PRUNE_MODE");
+      return env == nullptr ? 0 : std::atoi(env);
+    }();
+    return mode;
+  }
+
+  /*!
+   * \brief Whether a candidate is rejected because a reduction-loop tile has a
+   * middle factor of 1
+   * \param sch The schedule whose trace carries the sampled tiling decisions
+   * \return Whether the candidate should be pruned
+   */
+  static bool RejectByReductionTile(const s_tir::Schedule& sch) {
+    static const InstructionKind& inst_sample_perfect_tile =
+        InstructionKind::Get("SamplePerfectTile");
+    ffi::Optional<s_tir::Trace> trace = sch->trace();
+    if (!trace.has_value()) {
+      return false;
+    }
+    for (const auto& kv : trace.value()->decisions) {
+      if (!kv.first->kind.same_as(inst_sample_perfect_tile)) {
+        continue;
+      }
+      const auto* arr = kv.second.as<ffi::ArrayObj>();
+      if (arr == nullptr) {
+        continue;
+      }
+      std::vector<int64_t> tiles =
+          support::AsVector<ffi::ObjectRef, int64_t>(ffi::GetRef<ffi::Array<ffi::ObjectRef>>(arr));
+      // Under "SSSRRSRS" a reduction loop is split into 3 factors while a
+      // spatial loop is split into 5, so a 3-way tile marks the reduction axis.
+      if (tiles.size() == 3 && tiles[1] == 1) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   /*! \brief The number of total postprocessors. */
   int n_;
   /*! \brief The thread-safe trace replay failure counter. */
   std::atomic<int> trace_fail_counter_{0};
+  /*! \brief The thread-safe constraint-guided pruning rejection counter. */
+  std::atomic<int> prune_fail_counter_{0};
   /*! \brief The pointer to the list of postprocessor items. */
   Item* items_;
 };

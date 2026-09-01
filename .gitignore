@@ -299,3 +299,8 @@ pytest-of-bohanhou/
 # tir-bench run artifacts (regenerable; see .claude/commands/tir-bench.md)
 .tir-bench/
 .tir-bench-*/
+
+# Personal research artifacts (not for version control)
+experiments/work_dir/
+experiments/data/
+papers/*.pdf

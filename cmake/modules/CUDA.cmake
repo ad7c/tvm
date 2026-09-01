@@ -29,6 +29,7 @@ if(USE_CUDA)
     message(FATAL_ERROR "Cannot find CUDA, USE_CUDA=" ${USE_CUDA})
   endif()
   message(STATUS "Build with CUDA ${CUDA_VERSION} support")
+  set(CMAKE_CUDA_ARCHITECTURES "86" CACHE STRING "" FORCE)
   enable_language(CUDA)
 
   # Ensure that include directives to NVCC are in the

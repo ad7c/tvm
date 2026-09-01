@@ -18,6 +18,7 @@
 
 import os
 import shutil
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -201,8 +202,24 @@ def get_global_func_on_rpc_session(
 
 @register_global_func("s_tir.meta_schedule.remove_build_dir")
 def remove_build_dir(artifact_path: str) -> None:
-    """Clean up the build directory"""
-    shutil.rmtree(os.path.dirname(artifact_path))
+    """Clean up the build directory.
+
+    On Windows the compiled artifact (a DLL renamed to .so) may still be
+    memory-mapped/loaded by the runner worker, so deletion fails with an
+    access-denied error. The leftover temp directory is harmless, so retry a
+    few times and swallow the lock error instead of crashing the tuning.
+    """
+    build_dir = os.path.dirname(artifact_path)
+    for _ in range(3):
+        try:
+            shutil.rmtree(build_dir)
+            return
+        except PermissionError:
+            time.sleep(0.5)
+    try:
+        shutil.rmtree(build_dir)
+    except PermissionError:
+        pass  # DLL still loaded; leave it for OS cleanup
 
 
 def _json_de_tvm(obj: Any) -> Any:

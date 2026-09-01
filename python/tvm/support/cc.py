@@ -371,10 +371,124 @@ def _linux_compile(
         raise RuntimeError(msg)
 
 
+def _msvc_link_fallback(output, objects, options, cwd=None):
+    """Use MSVC link.exe when clang is not available (Windows fallback)."""
+    import shutil
+
+    # Find MSVC tools via VS installer
+    link_exe = None
+    vswhere = shutil.which("vswhere.exe") or ""
+    if vswhere:
+        import subprocess as sp
+        try:
+            result = sp.run(
+                [vswhere, "-latest", "-products", "*",
+                 "-requires", "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+                 "-property", "installationPath"],
+                capture_output=True, text=True, timeout=10,
+            )
+            vs_path = result.stdout.strip()
+            if vs_path:
+                # Find link.exe under VC/Tools/MSVC
+                import glob
+                candidates = glob.glob(f"{vs_path}/VC/Tools/MSVC/*/bin/Hostx64/x64/link.exe")
+                if candidates:
+                    link_exe = candidates[-1]
+        except Exception:
+            pass
+
+    # Fallback: known VS paths
+    if link_exe is None:
+        for vs_base in ["E:/vs", "C:/Program Files/Microsoft Visual Studio/2022",
+                         "C:/Program Files (x86)/Microsoft Visual Studio/2022"]:
+            import glob
+            candidates = glob.glob(f"{vs_base}/VC/Tools/MSVC/*/bin/Hostx64/x64/link.exe")
+            if candidates:
+                link_exe = candidates[-1]
+                break
+
+    if link_exe is None:
+        raise RuntimeError(
+            "Cannot find link.exe from Visual Studio. "
+            "Install LLVM clang or set TVM_WIN_CC to an alternative compiler."
+        )
+
+    # Build link.exe command line
+    link_cmd = [link_exe, "/DLL", "/NOLOGO", f"/OUT:{output}"] + list(objects)
+
+    # Add TVM import libraries (needed for TVM FFI symbols in compiled modules)
+    tvm_lib_dir = os.environ.get("TVM_LIBRARY_PATH", "")
+    if tvm_lib_dir:
+        for lib in ["tvm_ffi.lib", "tvm_runtime.lib"]:
+            lib_path = os.path.join(tvm_lib_dir, lib)
+            if os.path.exists(lib_path):
+                link_cmd.append(lib_path)
+
+    # Add required Windows SDK & CRT libraries with full paths
+    vc_lib_dir = os.path.dirname(link_exe).replace("\\bin\\Hostx64\\x64", "\\lib\\x64")
+    for std_lib in ["msvcrt.lib", "vcruntime.lib"]:
+        lib_path = os.path.join(vc_lib_dir, std_lib)
+        if os.path.exists(lib_path):
+            link_cmd.append(lib_path)
+    # Add Windows SDK lib paths (ucrt + um) for ucrt.lib, kernel32.lib, etc.
+    # The SDK may live on a non-C: drive; consult the registry KitsRoot10
+    # first so the drive is not hardcoded, then fall back to common paths.
+    sdk_bases = []
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
+                            r"SOFTWARE\Microsoft\Windows Kits\Installed Roots") as key:
+            root, _ = winreg.QueryValueEx(key, "KitsRoot10")
+            if root:
+                sdk_bases.append(root.rstrip("/\\") + "/Lib")
+    except Exception:
+        pass
+    sdk_bases += [
+        os.environ.get("WindowsSdkDir", "").rstrip("/\\") + "/Lib",
+        "D:/Windows Kits/10/Lib",
+        "C:/Program Files (x86)/Windows Kits/10/Lib",
+        "C:/Program Files/Windows Kits/10/Lib",
+        "C:/Windows Kits/10/Lib",
+    ]
+    for sdk_base in sdk_bases:
+        if not sdk_base or not os.path.isdir(sdk_base):
+            continue
+        import glob as _glob
+        ver_dirs = sorted(_glob.glob(f"{sdk_base}/10.*"))
+        if not ver_dirs:
+            continue
+        added = 0
+        for sub in ("ucrt/x64", "um/x64"):
+            lib_dir = f"{ver_dirs[-1]}/{sub}"
+            if os.path.isdir(lib_dir):
+                link_cmd.append(f"/LIBPATH:{lib_dir}")
+                added += 1
+        if added:
+            break
+    link_cmd.append("/NODEFAULTLIB:libcmt")
+
+    if options:
+        for opt in options:
+            if opt.startswith("-Wl,") or opt.startswith("-mllvm"):
+                continue
+            link_cmd.append(opt)
+
+    import subprocess as sp
+    proc = sp.Popen(link_cmd, stdout=sp.PIPE, stderr=sp.STDOUT, cwd=cwd)
+    out, _ = proc.communicate()
+    if proc.returncode != 0:
+        msg = "MSVC link fallback error:\n"
+        msg += " ".join(link_cmd) + "\n"
+        msg += out.decode("utf-8", errors="replace")
+        raise RuntimeError(msg)
+
+
 def _windows_compile(output, objects, options, cwd=None, ccache_env=None):
-    compiler = os.getenv("TVM_WIN_CC", default="clang")
-    win_target = os.getenv("TVM_WIN_TARGET", default="x86_64")
-    cmd = [compiler]
+    import shlex
+    compiler_str = os.getenv("TVM_WIN_CC", default="clang")
+    compiler = shlex.split(compiler_str) if " " in compiler_str else [compiler_str]
+    win_target = os.getenv("TVM_WIN_TARGET", default="x86_64-pc-windows-msvc")
+    cmd = compiler[:]
     cmd += ["-O2"]
     cmd += ["--target=" + win_target]
 
@@ -404,8 +518,11 @@ def _windows_compile(output, objects, options, cwd=None, ccache_env=None):
         )
         (out, _) = proc.communicate()
     except FileNotFoundError:
+        # clang not found on Windows — try MSVC link.exe for DLL creation
+        if output.endswith((".so", ".dll")) and not any(a.endswith((".c", ".cc", ".cpp")) for a in objects):
+            return _msvc_link_fallback(output, objects, options, cwd)
         raise RuntimeError(
-            "Can not find the LLVM clang for Windows clang.exe)."
+            "Can not find the LLVM clang for Windows (clang.exe). "
             "Make sure it's installed"
             " and the installation directory is in the %PATH% environment "
             "variable. Prebuilt binaries can be found at: https://llvm.org/"

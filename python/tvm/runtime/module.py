@@ -22,6 +22,7 @@
 import json
 import os
 import struct
+import sys
 from collections.abc import Sequence
 
 import numpy as np
@@ -461,6 +462,24 @@ def load_module(path):
         tar_temp = _utils.tempdir(custom_path=path.replace(".tar", ""))
         _tar.untar(path, tar_temp.temp_dir)
         files = [tar_temp.relpath(x) for x in tar_temp.listdir()]
+        if sys.platform == "win32":
+            import ctypes as _ctypes, shutil as _shutil
+            tvm_lib_dir = os.environ.get("TVM_LIBRARY_PATH", "")
+            if tvm_lib_dir:
+                for lib in ["tvm_ffi.lib", "tvm_runtime.lib"]:
+                    lib_path = os.path.join(tvm_lib_dir, lib)
+                    if os.path.exists(lib_path):
+                        files.append(lib_path)
+                # Pre-load DLL dependencies into the process BEFORE
+                # LoadLibrary runs on the generated .so. Once loaded,
+                # Windows will find symbols in already-loaded modules.
+                for dll in os.listdir(tvm_lib_dir):
+                    if dll.endswith(".dll"):
+                        dll_path = os.path.join(tvm_lib_dir, dll)
+                        try:
+                            _ctypes.CDLL(dll_path)
+                        except Exception:
+                            pass
         _cc.create_shared(path + ".so", files)
         path += ".so"
     # Redirect to the load API

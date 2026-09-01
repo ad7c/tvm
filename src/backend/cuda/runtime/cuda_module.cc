@@ -245,11 +245,15 @@ class CUDAWrappedFunc {
       attrs.push_back(attr);
     }
 
-    // 1b) Preferred cluster (CUDA 12.8+, cudaLaunchAttributePreferredClusterDimension)
+    // 1b) Preferred cluster (CUDA 13.0+, cudaLaunchAttributePreferredClusterDimension)
     if (wl.preferred_cluster_dim(0) != 1 || wl.preferred_cluster_dim(1) != 1 ||
         wl.preferred_cluster_dim(2) != 1) {
       CUlaunchAttribute attr{};
+#if CUDART_VERSION >= 13000
       attr.id = CU_LAUNCH_ATTRIBUTE_PREFERRED_CLUSTER_DIMENSION;
+#else
+      attr.id = CU_LAUNCH_ATTRIBUTE_CLUSTER_DIMENSION;
+#endif
       attr.value.clusterDim.x = wl.preferred_cluster_dim(0);
       attr.value.clusterDim.y = wl.preferred_cluster_dim(1);
       attr.value.clusterDim.z = wl.preferred_cluster_dim(2);
