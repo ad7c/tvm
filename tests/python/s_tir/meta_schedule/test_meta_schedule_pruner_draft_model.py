@@ -385,6 +385,27 @@ def test_pruner_draft_ga_empty_archive_returns_without_cost_model(monkeypatch):
         strategy.post_tuning()
 
 
+@pytest.mark.parametrize("verify_count", [64, 128])
+def test_pruner_draft_large_verify_pool_selects_ten_by_learned_score(monkeypatch, verify_count):
+    context, strategy, cost_model = _prepare_draft_strategy(monkeypatch, population_size=128)
+    monkeypatch.setenv("TVM_DRAFT_GA_VERIFY_RATIO", str(verify_count / 128))
+    evolve = tvm.get_global_func(
+        "s_tir.meta_schedule.SearchStrategyEvolutionarySearchEvolveWithCostModel"
+    )
+    try:
+        population = [_tagged_schedule(UnknownTiled, index) for index in range(128)]
+        selected = list(evolve(strategy, population, 10))
+        assert len(cost_model.calls) == 1
+        assert len(cost_model.calls[0]) == verify_count
+        assert len(selected) == 10
+        # The recording model assigns decreasing scores in input order.
+        selected_ids = {int(sch.mod["main"].attrs["draft_test_id"]) for sch in selected}
+        assert selected_ids == set(cost_model.calls[0][:10])
+        assert len(selected_ids) < len(cost_model.calls[0])
+    finally:
+        strategy.post_tuning()
+
+
 def test_pruner_draft_ga_unknown_archive_rotates_and_known_stays_prioritized(monkeypatch):
     evolve = tvm.get_global_func(
         "s_tir.meta_schedule.SearchStrategyEvolutionarySearchEvolveWithCostModel"

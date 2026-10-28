@@ -349,6 +349,19 @@ double ReadDraftGAVerifyRatio() {
              : kDefaultDraftGAVerifyRatio;
 }
 
+double ReadDraftGAFinalEpsilon() {
+  // Preserve historical experiments unless an explicit exploration quota is set.
+  const char* env = std::getenv("TVM_DRAFT_GA_FINAL_EPS");
+  if (env == nullptr) return 0.0;
+  char* end = nullptr;
+  double epsilon = std::strtod(env, &end);
+  TVM_FFI_CHECK(end != env && *end == '\0' && std::isfinite(epsilon) && epsilon >= 0.0 &&
+                    epsilon <= 1.0,
+                ValueError)
+      << "TVM_DRAFT_GA_FINAL_EPS must be a finite probability";
+  return epsilon;
+}
+
 double ReadDraftBeta() {
   const char* env = std::getenv("TVM_DRAFT_BETA");
   if (env == nullptr) return kDefaultDraftBeta;
@@ -1555,10 +1568,13 @@ std::vector<Schedule> EvolutionarySearchNode::State::PickWithEpsGreedy(
     picked_lineages->reserve(num);
   }
   double epsilon = ReadDraftGAMode() == 2
-                       ? 0.0
+                       ? ReadDraftGAFinalEpsilon()
                        : (ReadDraftMode() == 2 ? ReadDraftEpsilon() : self->eps_greedy);
   int num_rands = num * epsilon;
   int num_bests = num - num_rands;
+  TVM_PY_LOG(INFO, self->ctx_->logger)
+      << "Final selection quota: epsilon=" << epsilon << " model=" << num_bests
+      << " random=" << num_rands;
   std::vector<int> rands =
       s_tir::SampleWithoutReplacement(&self->rand_state_, unmeasured.size(), unmeasured.size());
   std::vector<Schedule> results;

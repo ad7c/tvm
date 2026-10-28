@@ -1,11 +1,20 @@
-# 当前完整模型实验
+# Current ResNet-18 experiment
 
-2026-10-25 21:45（Asia/Shanghai）：按用户要求暂停 ResNet-18 / Scout 端到端实验，转回论文讨论。
+Updated: 2026-10-28 (Asia/Shanghai).
 
-- [实时进度](results/e2e_20261025_A03/STATUS.md)
-- [运行协议和说明](results/e2e_20261025_A03/README.md)
-- [机器可读阶段](results/e2e_20261025_A03/progress.json)
+Active branch: scout/resnet18-pool64-128-20261028.
+Snapshot before changes: 8723123f487c38fd83d49129ee6aa12682c200c3, pushed to fork/pruning-experiment.
 
-三组各 2 次提交的链路验证已通过。正式 B 组已保存 173 条反馈和 173 条数据库记录，尚未完成 2000 次预算；正式 C/D 未启动。控制器、调优工作进程及状态发布器均已停止，没有自动续跑队列。
+- [Live status](results/resnet18_pool_20261028_A01/STATUS.md)
+- [Machine-readable progress](results/resnet18_pool_20261028_A01/progress.json)
+- [Frozen protocol](results/resnet18_pool_20261028_A01/protocol.json)
+- [Experiment design](SCOUT_POOL_STUDY_20261028.md)
 
-暂停记录见 [PAUSE.json](results/e2e_20261025_A03/PAUSE.json)，数据库和逐批日志快照位于 [paused_20261025_2145](results/e2e_20261025_A03/paused_20261025_2145/)。部分运行保留为未完成记录。此前算子实验保持已完成状态。
+The controller starts with two separate D64/D128 preflights, then runs four formal arms:
+matched MetaSchedule, constraints only, constraints + Draft64, constraints + Draft128.
+All arms use population 128, GA 2, and up to 10 GPU measurements per batch.
+Requested budget: 400 submissions per arm, 90 minutes per arm, eight hours total.
+The live status is authoritative: waiting_for_memory is not GPU tuning.
+
+Historical operator results and paused e2e_20261025_A03 are retained unchanged.
+The manuscript is not part of this experiment change.
