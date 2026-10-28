@@ -17,6 +17,7 @@
 """Regression checks for preserving interrupted experiment evidence."""
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -51,3 +52,29 @@ def test_architecture_audit_does_not_pass_empty_telemetry(tmp_path):
     (tmp_path / "logs").mkdir()
     with pytest.raises(RuntimeError, match="No nonempty scoring events"):
         study.audit_arm(tmp_path, "D64")
+
+
+def test_candidate_trace_round_trips_typed_values():
+    import tvm
+    from tvm.s_tir import Schedule
+
+    mod = tvm.script.from_source('''
+@T.prim_func(s_tir=True)
+def main(A: T.Buffer((16,), "float32"), B: T.Buffer((16,), "float32")):
+    for i in range(16):
+        with T.sblock("copy"):
+            v = T.axis.spatial(16, i)
+            B[v] = A[v]
+''')
+    sch = Schedule(mod)
+    block = sch.get_sblock("copy")
+    loop = sch.get_loops(block)[0]
+    sch.split(loop, factors=[4, 4])
+    sch.annotate(block, "audit_int64", tvm.tirx.IntImm("int64", 7))
+    candidate = SimpleNamespace(sch=sch)
+    key, serialized = study.trace_record(candidate, "t00")
+    replayed = Schedule(mod)
+    study.replay_trace_record(serialized, replayed)
+    tvm.ir.assert_structural_equal(replayed.mod, sch.mod)
+    assert key == study.trace_record(candidate, "t00")[0]
+    assert key != study.trace_record(candidate, "t01")[0]

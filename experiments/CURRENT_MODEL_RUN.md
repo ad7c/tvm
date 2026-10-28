@@ -5,9 +5,9 @@ Updated: 2026-10-28 (Asia/Shanghai).
 Active branch: scout/resnet18-pool64-128-20261028.
 Snapshot before changes: 8723123f487c38fd83d49129ee6aa12682c200c3, pushed to fork/pruning-experiment.
 
-- [Live status](results/resnet18_pool_20261028_A01/STATUS.md)
-- [Machine-readable progress](results/resnet18_pool_20261028_A01/progress.json)
-- [Frozen protocol](results/resnet18_pool_20261028_A01/protocol.json)
+- [Live status](results/resnet18_pool_20261028_A02/STATUS.md)
+- [Machine-readable progress](results/resnet18_pool_20261028_A02/progress.json)
+- [Frozen protocol](results/resnet18_pool_20261028_A02/protocol.json)
 - [Experiment design](SCOUT_POOL_STUDY_20261028.md)
 
 The controller starts with two separate D64/D128 preflights, then runs four formal arms:
@@ -18,3 +18,5 @@ The live status is authoritative: waiting_for_memory is not GPU tuning.
 
 Historical operator results and paused e2e_20261025_A03 are retained unchanged.
 The manuscript is not part of this experiment change.
+
+A01 is retained as a preflight diagnostic: candidate-trace JSON serialization failed before GPU measurement. A02 fixes recording only and uses the remaining original eight-hour budget.

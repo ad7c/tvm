@@ -84,7 +84,9 @@ def publish(study, state, **extra):
     progress = {"utc": utc(), "status": state, "controller_pid": os.getpid(), **extra}
     save(study / "progress.json", progress)
     lines = ["# ResNet-18 candidate-pool study", "", f"Updated: {progress['utc']}",
-             f"State: {state}", "", "| Arm | Feedback | Latest full-model ms | State |",
+             f"State: {state}", f"Phase: {extra.get('phase', '-')} / {extra.get('arm', '-')}",
+             f"Working directory: {extra.get('output', '-')}",
+             "", "| Arm | Feedback | Latest full-model ms | State |",
              "|---|---:|---:|---|"]
     for arm in ARMS:
         folder = study / ("formal_" + arm)
@@ -183,8 +185,25 @@ def copy_database(source, destination):
 
 
 def trace_record(candidate, task):
-    serialized = json.dumps(candidate.sch.trace.as_json(), separators=(",", ":"))
+    # Trace.as_json() retains typed IntImm/FloatImm values in this TVM revision.
+    # Encode these scalars separately; generic IR serialization of a whole Trace
+    # does not restore the instruction-kind callbacks needed for replay.
+    import tvm
+    def scalar(value):
+        if isinstance(value, (tvm.tirx.IntImm, tvm.tirx.FloatImm)):
+            return {"__tvm_scalar__": tvm.ir.save_json(value)}
+        raise TypeError(f"Unsupported trace value: {type(value).__name__}")
+    serialized = json.dumps(candidate.sch.trace.as_json(), default=scalar, separators=(",", ":"))
     return hashlib.sha256((task + "\n" + serialized).encode()).hexdigest(), serialized
+
+
+def replay_trace_record(serialized, schedule):
+    """Restore a saved trace including explicitly typed scalar attributes."""
+    import tvm
+    from tvm.s_tir.schedule import Trace
+    def scalar(value):
+        return tvm.ir.load_json(value["__tvm_scalar__"]) if set(value) == {"__tvm_scalar__"} else value
+    Trace.apply_json_to_schedule(json.loads(serialized, object_hook=scalar), schedule)
 
 
 def tune(args):
@@ -225,7 +244,9 @@ def tune(args):
                 key, trace = trace_record(candidate, task)
                 ids.append(key)
                 if key not in seen:
-                    stream.write(json.dumps({"task": task, "trace_sha256": key, "trace": json.loads(trace)}) + "\n")
+                    stream.write(json.dumps({"task": task, "trace_sha256": key,
+                                             "trace_format": "tvm.Trace.as_json+typed_scalars_v1",
+                                             "trace": json.loads(trace)}) + "\n")
                     seen.add(key)
         return ids
 
@@ -447,10 +468,14 @@ def report(study):
         if not (folder / "final_eval/result.json").exists():
             continue
         result, evaluation = read(folder / "result.json"), read(folder / "final_eval/result.json")
+        predictions = [json.loads(line) for line in
+                       (folder / "model_predictions.jsonl").read_text(encoding="utf-8").splitlines()]
         rows.append({"arm": arm, "submitted": result["submitted"],
                      "tune_wall_s": result["tune_wall_s"],
                      "final_median_ms": retiming.get(arm, {}).get("median_ms", evaluation["median_ms"]),
                      "independent_retiming": arm in retiming,
+                     "trained_prediction_calls": sum(not p["warmup"] for p in predictions),
+                     "warmup_prediction_calls": sum(p["warmup"] for p in predictions),
                      "tuned_functions": len(evaluation["applied_tuned_functions"]),
                      "fallback_functions": evaluation["fallback_functions"]})
     baseline = next((r for r in rows if r["arm"] == "B"), None)
@@ -467,13 +492,15 @@ def report(study):
     save(study / "comparison.json", rows)
     lines = ["# ResNet-18 pool-size comparison", "", "Matched parameters, legacy Draft, single search seed.",
              "Complete GPU VM forward; checkpoint observations only, no interpolation.", "",
-             "| Arm | Feedback | Tune wall min | Final ms | Tuned functions | Within B +5% |",
-             "|---|---:|---:|---:|---:|---|"]
+             "| Arm | Feedback | Tune wall min | Final ms | Tuned functions | Trained scoring calls | Within B +5% |",
+             "|---|---:|---:|---:|---:|---:|---|"]
     for row in rows:
         lines.append(f"| {row['arm']} | {row['submitted']} | {row['tune_wall_s']/60:.2f} | "
-                     f"{row['final_median_ms']:.5f} | {row['tuned_functions']} | {row.get('within_5_percent')} |")
+                     f"{row['final_median_ms']:.5f} | {row['tuned_functions']} | "
+                     f"{row['trained_prediction_calls']} | {row.get('within_5_percent')} |")
     lines += ["", "Timing repeats are not independent search seeds. Actual budgets may differ under time limits.",
               "Prediction audit overhead is recorded separately and remains included in wall time.",
+              "Zero trained scoring calls means that arm did not test learned XGBoost ranking beyond warmup.",
               "Legacy initialization/empty-candidate stopping rules are retained and must be considered with task coverage."]
     (study / "RESULTS.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
