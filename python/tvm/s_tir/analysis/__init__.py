@@ -142,6 +142,25 @@ def verify_gpu_code(func: PrimFunc, constraints: dict[str, int]) -> bool:
     return _ffi_api.verify_gpu_code(func, constraints)  # type: ignore
 
 
+def verify_gpu_code_errors(func: PrimFunc, constraints: dict[str, int]) -> list[str]:
+    """Return all GPU code verification errors.
+
+    Parameters
+    ----------
+    func: tvm.tirx.PrimFunc
+        The function to be verified.
+
+    constraints : Dict[str, int]
+        The attribute constraints.
+
+    Returns
+    -------
+    errors : List[str]
+        The detailed verification errors. An empty list means the code is valid.
+    """
+    return list(_ffi_api.verify_gpu_code_errors(func, constraints))  # type: ignore
+
+
 def calculate_allocated_bytes(
     func_or_mod: PrimFunc | IRModule,
 ) -> dict[str, dict[str, int]]:

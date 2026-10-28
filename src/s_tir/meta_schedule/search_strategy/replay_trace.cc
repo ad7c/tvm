@@ -71,6 +71,10 @@ class ReplayTraceNode : public SearchStrategyNode {
   TRandState rand_state_ = -1;
   /*! \brief The IRModule to be scheduled from TuneContext. */
   ffi::Optional<IRModule> mod_ = std::nullopt;
+  /*! \brief The target whose physical-thread limits are used by filtering. */
+  ffi::Optional<Target> target_ = std::nullopt;
+  /*! \brief The tuning task's logging function. */
+  ffi::Function logger_;
   /*! \brief The number of threads to be used. */
   int num_threads_ = -1;
   /*! \brief The postprocessors. */
@@ -97,6 +101,8 @@ class ReplayTraceNode : public SearchStrategyNode {
     }
     this->rand_state_ = ForkSeed(&ctx->rand_state);
     this->mod_ = ctx->mod;
+    this->target_ = ctx->target;
+    this->logger_ = ctx->logger;
     this->num_threads_ = ctx->num_threads;
     this->postprocs_ = ctx->space_generator.value()->postprocs.value_or({});
     this->state_.reset();
@@ -138,6 +144,8 @@ class ReplayTraceNode : public SearchStrategyNode {
     ffi::ObjectPtr<ReplayTraceNode> n = ffi::make_object<ReplayTraceNode>();
     n->max_fail_count = this->max_fail_count;
     n->rand_state_ = this->rand_state_;
+    n->target_ = this->target_;
+    n->logger_ = this->logger_;
     n->state_ = nullptr;  // cleared the state
     return SearchStrategy(n);
   }
@@ -152,7 +160,7 @@ ReplayTraceNode::State::GenerateMeasureCandidates() {
   TVM_FFI_ICHECK_LT(st, ed);
   std::vector<TRandState> per_thread_rand_state = ForkSeed(&self->rand_state_, self->num_threads_);
   ffi::Array<ffi::Optional<MeasureCandidate>> per_task_result(ed - st, std::nullopt);
-  ThreadedTraceApply pp(self->postprocs_);
+  ThreadedTraceApply pp(self->postprocs_, self->target_);
   auto f_worker = [this, &per_thread_rand_state, &per_task_result, &pp](int thread_id,
                                                                         int task_id) -> void {
     TRandState& rand_state = per_thread_rand_state[thread_id];
@@ -171,6 +179,7 @@ ReplayTraceNode::State::GenerateMeasureCandidates() {
     }
   };
   support::parallel_for_dynamic(0, ed - st, self->num_threads_, f_worker);
+  TVM_PY_LOG(INFO, self->logger_) << "Replay-Trace summary:\n" << pp.SummarizeFailures();
   ffi::Array<MeasureCandidate> filtered;
   filtered.reserve(ed - st);
   for (ffi::Optional<MeasureCandidate> result : per_task_result)

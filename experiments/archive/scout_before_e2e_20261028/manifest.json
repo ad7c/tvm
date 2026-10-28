@@ -1,0 +1,32 @@
+[
+  {
+    "file": "operator800_summary.json",
+    "source": "papers/figures/operator800_20261011_cohort/summary.json",
+    "sha256": "ed773108b7a4fe5c9fde138d350597c2a30efa52a01b3e50c7b6326ac8507093"
+  },
+  {
+    "file": "operator800_RESULTS.md",
+    "source": "papers/figures/operator800_20261011_cohort/RESULTS.md",
+    "sha256": "1a4ceb5bc5e8b0d5869c8aed45bf2b16b77e179f8c291cdef47a3e55db8cd84c"
+  },
+  {
+    "file": "resnet18_protocol.json",
+    "source": "experiments/results/e2e_20261025_A03/protocol.json",
+    "sha256": "1756c1be8e69a7a63f4497ca08e310488b75c742b93a926b6bed870b84342410"
+  },
+  {
+    "file": "resnet18_PAUSE.json",
+    "source": "experiments/results/e2e_20261025_A03/PAUSE.json",
+    "sha256": "c5a978be757d4763588c9ba2ed9c502ced5e6b56804a7542bee0528bac64ad78"
+  },
+  {
+    "file": "resnet18_STATUS.md",
+    "source": "experiments/results/e2e_20261025_A03/STATUS.md",
+    "sha256": "93d446171ae818435f6d80d1a908e79005398b32da30d4afee0f09618245573b"
+  },
+  {
+    "file": "empty_candidates_audit.json",
+    "source": "tmp/scout_search_audit_20261027/empty_candidates_and_measurement_audit.json",
+    "sha256": "166194904b404babbb93ee615879622c1ec522f6f7f9010d831d193169d3ea2e"
+  }
+]

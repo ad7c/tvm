@@ -128,6 +128,15 @@ TVM_DLL bool IsPureFunction(const PrimFunc& func, bool assert_on_error = false);
  */
 TVM_DLL bool VerifyGPUCode(const PrimFunc& func, ffi::Map<ffi::String, PrimExpr> constraints);
 
+/*!
+ * \brief Return all GPU code verification errors.
+ * \param func The function to be checked.
+ * \param constraints The dict to specify constraints to check.
+ * \return The verification error messages. An empty array means the code is valid.
+ */
+TVM_DLL ffi::Array<ffi::String> VerifyGPUCodeErrors(
+    const PrimFunc& func, ffi::Map<ffi::String, PrimExpr> constraints);
+
 /*! \brief Helper struct for return value of IdentifyMemCpy */
 struct MemCpyDetails {
   BufferRegion source;

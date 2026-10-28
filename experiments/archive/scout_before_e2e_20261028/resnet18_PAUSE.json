@@ -1,0 +1,53 @@
+{
+  "status": "paused_by_user",
+  "utc": "2026-10-25T13:45:42.878169+00:00",
+  "reason": "User requested stopping experiments and returning to manuscript review.",
+  "previous_progress": {
+    "utc": "2026-10-25T13:03:40.878956+00:00",
+    "status": "running",
+    "controller_pid": 11024,
+    "phase": "formal",
+    "arm": "B",
+    "output": "F:\\tvm\\experiments\\results\\e2e_20261025_A03\\formal_B"
+  },
+  "process_receipts": [
+    {
+      "pid": 11024,
+      "created": 1792932177.6798885,
+      "argv": [
+        "F:\\tvm\\.venv-tune\\python.exe",
+        "-u",
+        "-X",
+        "utf8",
+        "F:\\tvm\\experiments\\model_scout_study.py",
+        "run",
+        "--study",
+        "F:\\tvm\\experiments\\results\\e2e_20261025_A03",
+        "--trials",
+        "2000",
+        "--reuse-prepared",
+        "F:\\tvm\\experiments\\results\\e2e_20261025_A02"
+      ],
+      "action": "stop_controller_at_user_request"
+    },
+    {
+      "pid": 26508,
+      "created": 1792932707.056676,
+      "action": "stop_owned_status_publisher"
+    }
+  ],
+  "feedback_submissions": 173,
+  "database_records": 173,
+  "formal_completed": false,
+  "captured_utc": "2026-10-25T13:46:38.103052+00:00",
+  "snapshot": "F:\\tvm\\experiments\\results\\e2e_20261025_A03\\paused_20261025_2145",
+  "snapshot_sha256": {
+    "batches.jsonl": "ae7c668ffb2a37d208ae60f0239895b91a2b2c3ad7915eceb3fdcbc5946aef89",
+    "command.json": "6f48f686f9d0f270373fa1c7a069dc9308898b2081369559a163deecd576c9c3",
+    "database_tuning_record.json": "739f83224db5a1fe9bbc94bc720075d5cd0ef7d595f9d8220c4c97ce70ab3124",
+    "database_workload.json": "5e6bf150f9b07db9939876a77bfa3661633ece598f0cbb844943e6afde5d9939",
+    "progress.json": "9b1a167dba1407a55a64900c554e124b6e6150c4ca1b4d85e528451f885409de",
+    "timeline.jsonl": "78b02b4f5e569f0226f3bc5bf7f1fac417150fcd2d14e48896a11b0408bde7cd"
+  },
+  "remaining_study_processes": []
+}

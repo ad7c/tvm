@@ -791,7 +791,7 @@ def test_postproc_check_pass(mod):
 @pytest.mark.parametrize(
     "mod",
     [
-        Conv2dCuda2,  # Should fail due to too much local memory per block (large Apad_shared allocation)
+        Conv2dCuda2,  # Should fail due to too much shared memory per block (large Apad_shared allocation)
         Conv2dCuda3,  # Should fail due to too many threads per block (large threadIdx.x extent)
         GmmCuda1,
         GmmCuda2,
@@ -801,6 +801,24 @@ def test_postproc_check_fail(mod):
     ctx = _create_context(mod, target=_target())
     sch = tvm.s_tir.Schedule(mod, debug_mask="all")
     assert not ctx.space_generator.postprocs[0].apply(sch)
+
+
+@pytest.mark.parametrize(
+    "mod, expected",
+    [(Conv2dCuda2, "shared_memory"), (Conv2dCuda3, "threads_per_block"),
+     (GmmCuda1, "thread_extent"), (GmmCuda2, "thread_extent")],
+)
+def test_failure_reason_is_read_only_and_reset(mod, expected):
+    get_reason = tvm.get_global_func(
+        "s_tir.meta_schedule.testing.GetLastVerifyGPUCodeFailureReason"
+    )
+    failed_context = _create_context(mod, target=_target())
+    assert not failed_context.space_generator.postprocs[0].apply(tvm.s_tir.Schedule(mod))
+    assert get_reason() == expected
+    assert get_reason() == expected
+    passed_context = _create_context(Conv2dCuda0, target=_target())
+    assert passed_context.space_generator.postprocs[0].apply(tvm.s_tir.Schedule(Conv2dCuda0))
+    assert get_reason() == "none"
 
 
 if __name__ == "__main__":

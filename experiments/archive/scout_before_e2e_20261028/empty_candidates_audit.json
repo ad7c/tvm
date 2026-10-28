@@ -1,0 +1,380 @@
+{
+  "scope": "Read-only analysis of frozen records; no GPU runs or manuscript/code changes",
+  "operator_empty_batches": [
+    {
+      "id": "M128G1B01",
+      "log": "F:\\tvm\\experiments\\results\\o8_6ff1d8_001\\M128G1B01_matmul128_seed20261011_off_sample-off_hpos-trace_soft-off_draft-off_dga-off_ga-off_g3-off_g4-off\\logs\\tvm.s_tir.meta_schedule.logging.task_0_main.log",
+      "searches": 81,
+      "empty": 0,
+      "initialization_failures": 0
+    },
+    {
+      "id": "M128G1C01",
+      "log": "F:\\tvm\\experiments\\results\\o8_6ff1d8_003\\M128G1C01_matmul128_seed20261011_enforce_sample-enforce_hpos-trace_soft-off_draft-off_dga-off_ga-off_g3-off_g4-off\\logs\\tvm.s_tir.meta_schedule.logging.task_0_main.log",
+      "searches": 81,
+      "empty": 0,
+      "initialization_failures": 0
+    },
+    {
+      "id": "M128G1D01",
+      "log": "F:\\tvm\\experiments\\results\\o8_6ff1d8_004\\M128G1D01_matmul128_seed20261011_enforce_sample-enforce_hpos-trace_soft-off_draft-off_dga-enforce_ga-off_g3-off_g4-off\\logs\\tvm.s_tir.meta_schedule.logging.task_0_main.log",
+      "searches": 80,
+      "empty": 0,
+      "initialization_failures": 0
+    },
+    {
+      "id": "M256G1C01",
+      "log": "F:\\tvm\\experiments\\results\\o8_6ff1d8_017\\M256G1C01_matmul256_seed20261011_enforce_sample-enforce_hpos-trace_soft-off_draft-off_dga-off_ga-off_g3-off_g4-off\\logs\\tvm.s_tir.meta_schedule.logging.task_0_main.log",
+      "searches": 81,
+      "empty": 0,
+      "initialization_failures": 0
+    },
+    {
+      "id": "M256G1D01",
+      "log": "F:\\tvm\\experiments\\results\\o8_6ff1d8_022\\M256G1D01_matmul256_seed20261011_enforce_sample-enforce_hpos-trace_soft-off_draft-off_dga-enforce_ga-off_g3-off_g4-off\\logs\\tvm.s_tir.meta_schedule.logging.task_0_main.log",
+      "searches": 80,
+      "empty": 0,
+      "initialization_failures": 0
+    },
+    {
+      "id": "M256G1B01",
+      "log": "F:\\tvm\\experiments\\results\\o8_6ff1d8_023\\M256G1B01_matmul256_seed20261011_off_sample-off_hpos-trace_soft-off_draft-off_dga-off_ga-off_g3-off_g4-off\\logs\\tvm.s_tir.meta_schedule.logging.task_0_main.log",
+      "searches": 81,
+      "empty": 0,
+      "initialization_failures": 0
+    },
+    {
+      "id": "CONVG1D01",
+      "log": "F:\\tvm\\experiments\\results\\o8_6ff1d8_006\\CONVG1D01_conv2d_nchw3x3_seed20261011_enforce_sample-enforce_hpos-trace_soft-off_draft-off_dga-enforce_ga-off_g3-off_g4-off\\logs\\tvm.s_tir.meta_schedule.logging.task_0_main.log",
+      "searches": 80,
+      "empty": 0,
+      "initialization_failures": 0
+    },
+    {
+      "id": "CONVG1B01",
+      "log": "F:\\tvm\\experiments\\results\\o8_6ff1d8_007\\CONVG1B01_conv2d_nchw3x3_seed20261011_off_sample-off_hpos-trace_soft-off_draft-off_dga-off_ga-off_g3-off_g4-off\\logs\\tvm.s_tir.meta_schedule.logging.task_0_main.log",
+      "searches": 81,
+      "empty": 0,
+      "initialization_failures": 0
+    },
+    {
+      "id": "CONVG1C01",
+      "log": "F:\\tvm\\experiments\\results\\o8_6ff1d8_019\\CONVG1C01_conv2d_nchw3x3_seed20261011_enforce_sample-enforce_hpos-trace_soft-off_draft-off_dga-off_ga-off_g3-off_g4-off\\logs\\tvm.s_tir.meta_schedule.logging.task_0_main.log",
+      "searches": 82,
+      "empty": 0,
+      "initialization_failures": 0
+    },
+    {
+      "id": "REDG1B01",
+      "log": "F:\\tvm\\experiments\\results\\o8_6ff1d8_011\\REDG1B01_reduction4096_seed20261011_off_sample-off_hpos-trace_soft-off_draft-off_dga-off_ga-off_g3-off_g4-off\\logs\\tvm.s_tir.meta_schedule.logging.task_0_main.log",
+      "searches": 17,
+      "empty": 5,
+      "initialization_failures": 0
+    },
+    {
+      "id": "REDG1C01",
+      "log": "F:\\tvm\\experiments\\results\\o8_6ff1d8_012\\REDG1C01_reduction4096_seed20261011_enforce_sample-enforce_hpos-trace_soft-off_draft-off_dga-off_ga-off_g3-off_g4-off\\logs\\tvm.s_tir.meta_schedule.logging.task_0_main.log",
+      "searches": 17,
+      "empty": 5,
+      "initialization_failures": 0
+    },
+    {
+      "id": "REDG1D01",
+      "log": "F:\\tvm\\experiments\\results\\o8_6ff1d8_013\\REDG1D01_reduction4096_seed20261011_enforce_sample-enforce_hpos-trace_soft-off_draft-off_dga-enforce_ga-off_g3-off_g4-off\\logs\\tvm.s_tir.meta_schedule.logging.task_0_main.log",
+      "searches": 16,
+      "empty": 5,
+      "initialization_failures": 0
+    }
+  ],
+  "reduction": {
+    "B": {
+      "records": 85,
+      "database": "F:\\tvm\\experiments\\results\\o8_6ff1d8_011\\REDG1B01_reduction4096_seed20261011_off_sample-off_hpos-trace_soft-off_draft-off_dga-off_ga-off_g3-off_g4-off\\database_tuning_record.json",
+      "workload_sha256": "28acaa74fcdc948f01ebd9d94e3f8ef6f8d2eda7d52adade8f03b07e0e787cf5"
+    },
+    "C": {
+      "records": 88,
+      "database": "F:\\tvm\\experiments\\results\\o8_6ff1d8_012\\REDG1C01_reduction4096_seed20261011_enforce_sample-enforce_hpos-trace_soft-off_draft-off_dga-off_ga-off_g3-off_g4-off\\database_tuning_record.json",
+      "workload_sha256": "28acaa74fcdc948f01ebd9d94e3f8ef6f8d2eda7d52adade8f03b07e0e787cf5"
+    },
+    "D": {
+      "records": 88,
+      "database": "F:\\tvm\\experiments\\results\\o8_6ff1d8_013\\REDG1D01_reduction4096_seed20261011_enforce_sample-enforce_hpos-trace_soft-off_draft-off_dga-enforce_ga-off_g3-off_g4-off\\database_tuning_record.json",
+      "workload_sha256": "28acaa74fcdc948f01ebd9d94e3f8ef6f8d2eda7d52adade8f03b07e0e787cf5"
+    },
+    "space": {
+      "template0_choices": 24,
+      "template1_choices": 64,
+      "total_decision_combinations": 88,
+      "scope": "Current two templates and their categorical decisions; not all possible reduction implementations",
+      "C_D_cover_same_88_combinations": true,
+      "B_shared_traces_identical": 85
+    },
+    "winner_cross_measurements": [
+      {
+        "selected_by": "B",
+        "decisions": [
+          [
+            [
+              0,
+              16,
+              32,
+              64,
+              128,
+              256,
+              512,
+              1024
+            ],
+            128
+          ],
+          [
+            [
+              4,
+              8,
+              16,
+              32,
+              64,
+              128,
+              256,
+              512
+            ],
+            4
+          ]
+        ],
+        "measured_us": {
+          "B": 31.125909090909097,
+          "C": 73.81219325368939,
+          "D": 85.76927379949453
+        },
+        "trace_sha256": "0131b56ee17b27a32cd1965ca3376d5f1b1a5146b2b1565c201bbc011284daae"
+      },
+      {
+        "selected_by": "C",
+        "decisions": [
+          [
+            [
+              0,
+              16,
+              32,
+              64,
+              128,
+              256,
+              512,
+              1024
+            ],
+            64
+          ],
+          [
+            [
+              4,
+              8,
+              16,
+              32,
+              64,
+              128,
+              256,
+              512
+            ],
+            4
+          ]
+        ],
+        "measured_us": {
+          "B": 174.77448205128204,
+          "C": 31.788436,
+          "D": 74.5702860125261
+        },
+        "trace_sha256": "0cb91c068ba510da8daf55da76c98539505ecea45bd1ea8319a1700b582fa967"
+      },
+      {
+        "selected_by": "D",
+        "decisions": [
+          [
+            [
+              0,
+              16,
+              32,
+              64,
+              128,
+              256,
+              512,
+              1024
+            ],
+            256
+          ],
+          [
+            [
+              4,
+              8,
+              16,
+              32,
+              64,
+              128,
+              256,
+              512
+            ],
+            32
+          ]
+        ],
+        "measured_us": {
+          "B": 59.6659246740705,
+          "C": 40.227875912408756,
+          "D": 35.500896309314584
+        },
+        "trace_sha256": "360afa09c62de9d9e110c5ce2acdb86fde388ca08057b81b03242d7182e2c781"
+      }
+    ]
+  },
+  "e2e": {
+    "scope": "Incomplete formal B run only; formal C/D not run",
+    "tasks_total": 20,
+    "feedback_submissions": 173,
+    "feedback_batches": 23,
+    "empty_feedback_batches": 4,
+    "empty_searches": [
+      {
+        "task": 1,
+        "name": "transpose",
+        "counts": [
+          1,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "log": "F:\\tvm\\experiments\\results\\e2e_20261025_A03\\formal_B\\logs\\tvm.s_tir.meta_schedule.logging.task_01_t01.log"
+      }
+    ],
+    "initialization_failures": [
+      {
+        "task": 4,
+        "name": "fused_conv2d1_subtract1_divide1_expand_dims_multiply1_expand_dims_add2_relu1",
+        "log": "F:\\tvm\\experiments\\results\\e2e_20261025_A03\\formal_B\\logs\\tvm.s_tir.meta_schedule.logging.task_04_t04.log",
+        "prior_nonempty_searches": 1,
+        "target": 26,
+        "returned": 4,
+        "generated": 208,
+        "postproc_passed": 4,
+        "batches": 8
+      },
+      {
+        "task": 8,
+        "name": "fused_conv2d2_subtract2_divide2_expand_dims1_multiply2_expand_dims1_add5_relu2",
+        "log": "F:\\tvm\\experiments\\results\\e2e_20261025_A03\\formal_B\\logs\\tvm.s_tir.meta_schedule.logging.task_08_t08.log",
+        "prior_nonempty_searches": 0,
+        "target": 32,
+        "returned": 6,
+        "generated": 320,
+        "postproc_passed": 6,
+        "batches": 10
+      },
+      {
+        "task": 9,
+        "name": "fused_conv2d3_subtract2_divide2_expand_dims1_multiply2_expand_dims1_add5_add6_relu2",
+        "log": "F:\\tvm\\experiments\\results\\e2e_20261025_A03\\formal_B\\logs\\tvm.s_tir.meta_schedule.logging.task_09_t09.log",
+        "prior_nonempty_searches": 1,
+        "target": 26,
+        "returned": 12,
+        "generated": 338,
+        "postproc_passed": 12,
+        "batches": 13
+      },
+      {
+        "task": 10,
+        "name": "fused_matmul_add13",
+        "log": "F:\\tvm\\experiments\\results\\e2e_20261025_A03\\formal_B\\logs\\tvm.s_tir.meta_schedule.logging.task_10_t10.log",
+        "prior_nonempty_searches": 0,
+        "target": 32,
+        "returned": 3,
+        "generated": 224,
+        "postproc_passed": 3,
+        "batches": 7
+      },
+      {
+        "task": 11,
+        "name": "fused_conv2d5_subtract3_divide3_expand_dims2_multiply3_expand_dims2_add8_relu3",
+        "log": "F:\\tvm\\experiments\\results\\e2e_20261025_A03\\formal_B\\logs\\tvm.s_tir.meta_schedule.logging.task_11_t11.log",
+        "prior_nonempty_searches": 1,
+        "target": 26,
+        "returned": 8,
+        "generated": 234,
+        "postproc_passed": 8,
+        "batches": 9
+      },
+      {
+        "task": 12,
+        "name": "fused_conv2d6_subtract3_divide3_expand_dims2_multiply3_expand_dims2_add8_add9_relu3",
+        "log": "F:\\tvm\\experiments\\results\\e2e_20261025_A03\\formal_B\\logs\\tvm.s_tir.meta_schedule.logging.task_12_t12.log",
+        "prior_nonempty_searches": 1,
+        "target": 26,
+        "returned": 9,
+        "generated": 260,
+        "postproc_passed": 9,
+        "batches": 10
+      },
+      {
+        "task": 13,
+        "name": "fused_conv2d6_subtract3_divide3_expand_dims2_multiply3_expand_dims2_add8_relu3",
+        "log": "F:\\tvm\\experiments\\results\\e2e_20261025_A03\\formal_B\\logs\\tvm.s_tir.meta_schedule.logging.task_13_t13.log",
+        "prior_nonempty_searches": 0,
+        "target": 32,
+        "returned": 9,
+        "generated": 384,
+        "postproc_passed": 9,
+        "batches": 12
+      },
+      {
+        "task": 14,
+        "name": "fused_conv2d8_subtract4_divide4_expand_dims3_multiply4_expand_dims3_add11_relu4",
+        "log": "F:\\tvm\\experiments\\results\\e2e_20261025_A03\\formal_B\\logs\\tvm.s_tir.meta_schedule.logging.task_14_t14.log",
+        "prior_nonempty_searches": 0,
+        "target": 32,
+        "returned": 4,
+        "generated": 256,
+        "postproc_passed": 4,
+        "batches": 8
+      },
+      {
+        "task": 16,
+        "name": "fused_conv2d9_subtract4_divide4_expand_dims3_multiply4_expand_dims3_add11_add12_relu4",
+        "log": "F:\\tvm\\experiments\\results\\e2e_20261025_A03\\formal_B\\logs\\tvm.s_tir.meta_schedule.logging.task_16_t16.log",
+        "prior_nonempty_searches": 0,
+        "target": 32,
+        "returned": 2,
+        "generated": 224,
+        "postproc_passed": 2,
+        "batches": 7
+      },
+      {
+        "task": 17,
+        "name": "fused_conv2d9_subtract4_divide4_expand_dims3_multiply4_expand_dims3_add11_relu4",
+        "log": "F:\\tvm\\experiments\\results\\e2e_20261025_A03\\formal_B\\logs\\tvm.s_tir.meta_schedule.logging.task_17_t17.log",
+        "prior_nonempty_searches": 0,
+        "target": 32,
+        "returned": 13,
+        "generated": 448,
+        "postproc_passed": 13,
+        "batches": 14
+      }
+    ],
+    "terminated_tasks": [
+      8,
+      10,
+      13,
+      14,
+      16,
+      17,
+      12,
+      9,
+      4,
+      1,
+      11
+    ]
+  },
+  "sources": [
+    {
+      "path": "F:\\tvm\\papers\\figures\\operator800_20261011_cohort\\summary.json",
+      "sha256": "ed773108b7a4fe5c9fde138d350597c2a30efa52a01b3e50c7b6326ac8507093"
+    }
+  ]
+}

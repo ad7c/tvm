@@ -99,12 +99,54 @@ class ThreadExtentChecker : private StmtVisitor {
   int thread_warp_size_ = -1;
 };
 
+
 }  // namespace s_tir
 }  // namespace tvm
 
 namespace tvm {
 namespace s_tir {
 namespace meta_schedule {
+
+namespace {
+
+thread_local VerifyGPUCodeFailureReason last_verify_gpu_code_failure_reason =
+    VerifyGPUCodeFailureReason::kNone;
+
+void SetLastVerifyGPUCodeFailureReason(VerifyGPUCodeFailureReason reason) {
+  last_verify_gpu_code_failure_reason = reason;
+}
+
+VerifyGPUCodeFailureReason ClassifyVerifyGPUCodeError(const ffi::String& error) {
+  std::string message(error);
+  if (message.find("threads per block") != std::string::npos) {
+    return VerifyGPUCodeFailureReason::kThreadsPerBlock;
+  }
+  if (message.find("threadIdx.") != std::string::npos) {
+    return VerifyGPUCodeFailureReason::kThreadExtent;
+  }
+  if (message.find("shared memory") != std::string::npos) {
+    return VerifyGPUCodeFailureReason::kSharedMemory;
+  }
+  if (message.find("local memory") != std::string::npos) {
+    return VerifyGPUCodeFailureReason::kLocalMemory;
+  }
+  if (message.find("vthread") != std::string::npos) {
+    return VerifyGPUCodeFailureReason::kVThread;
+  }
+  if (message.find("vector bytes") != std::string::npos) {
+    return VerifyGPUCodeFailureReason::kVectorBytes;
+  }
+  if (message.find("launched kernels") != std::string::npos) {
+    return VerifyGPUCodeFailureReason::kKernelCount;
+  }
+  return VerifyGPUCodeFailureReason::kUnknown;
+}
+
+}  // namespace
+
+VerifyGPUCodeFailureReason GetLastVerifyGPUCodeFailureReason() {
+  return last_verify_gpu_code_failure_reason;
+}
 
 /*! \brief Extract attribute from a target. */
 IntImm Extract(const Target& target, const char* name) {
@@ -135,24 +177,28 @@ class VerifyGPUCodeNode : public PostprocNode {
     thread_warp_size_ = static_cast<int>(Extract(this->target_, "thread_warp_size")->value);
   }
 
-  bool Verify(const IRModule& mod) const {
+  VerifyGPUCodeFailureReason Verify(const IRModule& mod) const {
     for (const auto& kv : mod->functions) {
       if (auto prim_func = kv.second.as<tirx::PrimFunc>()) {
-        if (!s_tir::VerifyGPUCode(prim_func.value(), this->target_constraints_)) {
-          return false;
+        ffi::Array<ffi::String> errors =
+            s_tir::VerifyGPUCodeErrors(prim_func.value(), this->target_constraints_);
+        if (!errors.empty()) {
+          return ClassifyVerifyGPUCodeError(errors[0]);
         }
       }
     }
-    return true;
+    return VerifyGPUCodeFailureReason::kNone;
   }
 
   bool Apply(const s_tir::Schedule& sch) final {
+    SetLastVerifyGPUCodeFailureReason(VerifyGPUCodeFailureReason::kNone);
     IRModule mod = sch->mod();
     for (const auto& kv : mod->functions) {
       const GlobalVar& g_var = kv.first;
       const BaseFunc& base_func = kv.second;
       if (const auto* prim_func = base_func.as<tirx::PrimFuncNode>()) {
         if (!s_tir::ThreadExtentChecker::Check(prim_func->body, thread_warp_size_)) {
+          SetLastVerifyGPUCodeFailureReason(VerifyGPUCodeFailureReason::kThreadExtent);
           return false;
         }
         IRModule lowered{ffi::UnsafeInit()};
@@ -196,9 +242,12 @@ class VerifyGPUCodeNode : public PostprocNode {
               IRModule(ffi::Map<GlobalVar, BaseFunc>({{GlobalVar(g_var->name_hint), f}}));
           lowered = tvm::transform::Sequential(pass_list)(std::move(mod));
         } catch (const std::exception&) {
+          SetLastVerifyGPUCodeFailureReason(VerifyGPUCodeFailureReason::kLoweringException);
           return false;
         }
-        if (!Verify(lowered)) {
+        VerifyGPUCodeFailureReason failure_reason = Verify(lowered);
+        if (failure_reason != VerifyGPUCodeFailureReason::kNone) {
+          SetLastVerifyGPUCodeFailureReason(failure_reason);
           return false;
         }
       }
@@ -229,7 +278,12 @@ Postproc Postproc::VerifyGPUCode() {
 TVM_FFI_STATIC_INIT_BLOCK() {
   namespace refl = tvm::ffi::reflection;
   VerifyGPUCodeNode::RegisterReflection();
-  refl::GlobalDef().def("s_tir.meta_schedule.PostprocVerifyGPUCode", Postproc::VerifyGPUCode);
+  refl::GlobalDef()
+      .def("s_tir.meta_schedule.PostprocVerifyGPUCode", Postproc::VerifyGPUCode)
+      .def("s_tir.meta_schedule.testing.GetLastVerifyGPUCodeFailureReason", []() {
+        // Read immediately after a synchronous VerifyGPUCode call on this thread.
+        return ffi::String(VerifyGPUCodeFailureReasonName(GetLastVerifyGPUCodeFailureReason()));
+      });
 }
 
 }  // namespace meta_schedule

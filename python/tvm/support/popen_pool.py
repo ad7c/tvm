@@ -47,13 +47,13 @@ def kill_child_processes(pid):
     try:
         parent = psutil.Process(pid)
         children = parent.children(recursive=True)
-    except psutil.NoSuchProcess:
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
         return
 
     for process in children:
         try:
             process.kill()
-        except psutil.NoSuchProcess:
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
             pass
 
 

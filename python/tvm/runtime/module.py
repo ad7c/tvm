@@ -470,16 +470,13 @@ def load_module(path):
                     lib_path = os.path.join(tvm_lib_dir, lib)
                     if os.path.exists(lib_path):
                         files.append(lib_path)
-                # Pre-load DLL dependencies into the process BEFORE
-                # LoadLibrary runs on the generated .so. Once loaded,
-                # Windows will find symbols in already-loaded modules.
-                for dll in os.listdir(tvm_lib_dir):
-                    if dll.endswith(".dll"):
-                        dll_path = os.path.join(tvm_lib_dir, dll)
-                        try:
-                            _ctypes.CDLL(dll_path)
-                        except Exception:
-                            pass
+                # Preload only the core dependencies of the import libraries.
+                # Other DLLs can have unrelated static initializers, including
+                # testing registrations that fail when loaded into this process.
+                for dll in ("tvm_ffi.dll", "tvm_runtime.dll"):
+                    dll_path = os.path.join(tvm_lib_dir, dll)
+                    if os.path.isfile(dll_path):
+                        _ctypes.CDLL(dll_path)
         _cc.create_shared(path + ".so", files)
         path += ".so"
     # Redirect to the load API

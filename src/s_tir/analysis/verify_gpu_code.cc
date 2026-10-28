@@ -103,11 +103,12 @@ class GPUCodeVerifier : public StmtExprVisitor {
         kernels_launched_++;
       }
 
-      Var var = op->node.as<IterVarNode>()->var;
+      const auto* iter_var = op->node.as<IterVarNode>();
       const auto* extent = op->value.as<IntImmNode>();
+      TVM_FFI_ICHECK(iter_var);
       TVM_FFI_ICHECK(extent);
 
-      std::string name = var.get()->name_hint;
+      std::string name = iter_var->thread_tag;
       // record the number of threads in a block
       if (name == "threadIdx.x" || name == "threadIdx.y" || name == "threadIdx.z" ||
           name == "vthread") {
@@ -335,9 +336,20 @@ bool VerifyGPUCode(const PrimFunc& func, ffi::Map<ffi::String, PrimExpr> constra
   return errs.size() == 0;
 }
 
+ffi::Array<ffi::String> VerifyGPUCodeErrors(
+    const PrimFunc& func, ffi::Map<ffi::String, PrimExpr> constraints) {
+  ffi::Array<ffi::String> result;
+  for (const ffi::String& error : VerifyGPUCode_(func, constraints)) {
+    result.push_back(error);
+  }
+  return result;
+}
+
 TVM_FFI_STATIC_INIT_BLOCK() {
   namespace refl = tvm::ffi::reflection;
-  refl::GlobalDef().def("s_tir.analysis.verify_gpu_code", VerifyGPUCode);
+  refl::GlobalDef()
+      .def("s_tir.analysis.verify_gpu_code", VerifyGPUCode)
+      .def("s_tir.analysis.verify_gpu_code_errors", VerifyGPUCodeErrors);
 }
 
 namespace transform {
