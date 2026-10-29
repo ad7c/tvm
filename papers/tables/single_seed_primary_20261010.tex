@@ -1,0 +1,35 @@
+% Auto-generated from audited summary.json; do not edit numeric cells.
+% Source SHA256: 32b22c8a529af34f8b22a9bfd7397a15e93341e689830e89ff46a5cdcd1cc663
+% Regenerate with experiments/export_single_seed_paper_tables.py.
+\begin{table*}[tb]
+\centering
+\caption{同预算主结果：预先固定一个搜索 seed（20261011），每臂 32 submitted，均得到 32 次有限且正确的测量。B=baseline，C=CS+H，D=CS+H+粗筛。观测最优来自调优数据库；重测固定原 top-1，每臂 30 个技术重复的中位数，不回填调优曲线，也不增加独立搜索 seed。}
+\label{tab:single-primary}
+\fontsize{9}{11}\selectfont
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{llrrrrrr}
+\toprule
+算子 / GA & 臂 & 生成 & \shortstack{Verify\\失败} & \shortstack{Search\\(s)} & \shortstack{Tune\\(s)} & \shortstack{观测最优\\($\mu$s)} & \shortstack{原 top-1 重测\\中位数 ($\mu$s)} \\
+\midrule
+MatMul128 / 1 & B & 2018 & 1531 & 105.154 & 790.161 & 34.0845 & 31.7013 \\
+ & C & 773 & 231 & 145.273 & 778.711 & 33.6107 & 31.8705 \\
+ & D & 732 & 210 & 127.051 & 773.069 & 33.5186 & 34.0597 \\
+\midrule
+MatMul128 / 4 & B & 3068 & 1952 & 133.155 & 765.013 & 33.0918 & 37.5262 \\
+ & C & 1474 & 224 & 140.818 & 817.116 & 35.2377 & 36.1484 \\
+ & D & 1535 & 274 & 143.172 & 811.631 & 33.4867 & 35.1035 \\
+\midrule
+MatMul256 / 1 & B & 2453 & 1966 & 136.738 & 802.983 & 32.8173 & 31.4930 \\
+ & C & 1040 & 516 & 172.585 & 867.306 & 50.0943 & 44.1429 \\
+ & D & 966 & 451 & 140.925 & 783.873 & 33.8304 & 34.4057 \\
+\midrule
+Conv / 1 & B & 1958 & 1467 & 119.082 & 794.351 & 34.3407 & 37.7946 \\
+ & C & 758 & 199 & 118.814 & 809.308 & 33.7829 & 37.6410 \\
+ & D & 757 & 208 & 134.831 & 834.919 & 34.9225 & 37.6904 \\
+\midrule
+Reduction / 1 & B & 373 & 0 & 1.353 & 665.286 & 35.7334 & 35.9612 \\
+ & C & 344 & 0 & 1.376 & 665.380 & 37.2612 & 36.8367 \\
+ & D & 359 & 0 & 0.816 & 628.305 & 33.5466 & 32.4199 \\
+\bottomrule
+\end{tabular}
+\end{table*}

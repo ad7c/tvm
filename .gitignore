@@ -304,3 +304,12 @@ pytest-of-bohanhou/
 experiments/work_dir/
 experiments/data/
 papers/*.pdf
+papers/*.aux
+papers/*.synctex.gz
+
+# Scout local environments and generated runs; fixed fixtures are versioned separately.
+.venv-tune/
+tmp/
+experiments/results/
+experiments/validation/
+experiments/_tmp_*/

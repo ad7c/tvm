@@ -32,8 +32,8 @@ import traceback
 
 ROOT = Path(__file__).resolve().parents[1]
 DRIVER = Path(__file__).resolve()
-MODEL = ROOT / "experiments/results/model_smoke_20261025_A01/resnet18"
-FALLBACK = MODEL / "gpu_A05_terminal/model.scheduled.json"
+MODEL = ROOT / "experiments/fixtures/resnet18_fp32_sm86"
+FALLBACK = MODEL / "model.scheduled.json"
 SEED = 20261011
 
 
@@ -56,6 +56,7 @@ def utc():
 
 
 def environment(arm="B"):
+    (ROOT / "tmp").mkdir(exist_ok=True)
     env = dict(os.environ)
     env.update({
         "TVM_EXPERIMENT_NO_TORCH": "1", "TVM_FFI_DISABLE_TORCH_C_DLPACK": "1",

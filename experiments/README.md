@@ -1,5 +1,8 @@
 # Bidirectional Pruning Experiments
 
+**2026-10-29 Scout branch:** [安装、迁移和端到端运行说明](README_SCOUT_1029.md)。
+新版入口是 `python experiments/scout_cli.py`；下方保留早期实验说明。
+
 Research Plan §3.4: GPU kernel search space reduction via bidirectional pruning.
 
 ## Structure

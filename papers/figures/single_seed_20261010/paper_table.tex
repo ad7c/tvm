@@ -1,0 +1,28 @@
+% Auto-generated from audited raw results; do not edit numeric cells.
+% B=Baseline, C=CS+H, D=CS+H+Draft-GA. See RESULTS.md for provenance and limitations.
+\begin{table}[t]
+\centering\small
+\begin{tabular}{llrrr}
+\toprule
+Workload / GA & Arm & Tune (s) & Observed best ($\mu$s) & Retimed median ($\mu$s) \\
+\midrule
+matmul128 / 1 & B & 790.161 & 34.0845 & 31.7013 \\
+matmul128 / 1 & C & 778.711 & 33.6107 & 31.8705 \\
+matmul128 / 1 & D & 773.069 & 33.5186 & 34.0597 \\
+matmul128 / 4 & B & 765.013 & 33.0918 & 37.5262 \\
+matmul128 / 4 & C & 817.116 & 35.2377 & 36.1484 \\
+matmul128 / 4 & D & 811.631 & 33.4867 & 35.1035 \\
+matmul256 / 1 & B & 802.983 & 32.8173 & 31.4930 \\
+matmul256 / 1 & C & 867.306 & 50.0943 & 44.1429 \\
+matmul256 / 1 & D & 783.873 & 33.8304 & 34.4057 \\
+conv2d\_nchw3x3 / 1 & B & 794.351 & 34.3407 & 37.7946 \\
+conv2d\_nchw3x3 / 1 & C & 809.308 & 33.7829 & 37.6410 \\
+conv2d\_nchw3x3 / 1 & D & 834.919 & 34.9225 & 37.6904 \\
+reduction4096 / 1 & B & 665.286 & 35.7334 & 35.9612 \\
+reduction4096 / 1 & C & 665.380 & 37.2612 & 36.8367 \\
+reduction4096 / 1 & D & 628.305 & 33.5466 & 32.4199 \\
+\bottomrule
+\end{tabular}
+\caption{One fixed search seed (20261011), 32 submitted candidates per arm. Independent retiming fixes the original winner and uses 30 technical samples; it does not replace the search observations. B: baseline; C: CS+H; D: CS+H+Draft-GA.}
+\label{tab:single-seed-20261010}
+\end{table}

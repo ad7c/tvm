@@ -1,0 +1,304 @@
+% 论文初稿（中文工作版 v0.2）— 依据 experiments/IMPLEMENTATION_EXPERIMENT_PLAN.md
+% 【已弃用】本稿为旧框架（占位数字、四贡献 H/G/P/L、含 Heron），现以 papers/main.tex 为准，勿再修改或引用本稿的占位数字。
+% 目标会议：CGO / PPoPP（正式投稿版将回译为英文）
+% 说明：所有实验数字为占位符，以 [待补] 标注；不得把本稿占位数字当作实测结论。
+
+% ===== Overleaf 使用说明 =====
+% 1. 新建空白项目，把本文件全文粘贴进 main.tex
+% 2. 左上角 Menu → Compiler 选择 XeLaTeX（ctex 中文需要）
+% 3. 直接 Recompile 即可；无需额外 .bib 文件（参考文献已内嵌）
+\documentclass[UTF8]{ctexart}
+\usepackage{amsmath,amssymb}
+\usepackage{amsthm}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\newtheorem{theorem}{定理}
+
+\title{约束引导的探索：面向张量程序自动调优的保守资源过滤与可行性保持变异}
+
+\author{[作者，单位]}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+基于搜索的张量程序编译器（如 TVM MetaSchedule）会生成海量调度候选，其中绝大多数违反硬件资源约束，只有在经历昂贵的 lowering 与代码验证之后才被丢弃。
+本文观察到：决定候选合法性的两个核心量——共享内存用量与每块线程数——可以以近乎零的成本从调度结构中精确推导，且同一套结构分析同样可以用于引导进化搜索。
+据此，本文提出共享同一资源分析的两个机制。
+其一，\textbf{保守硬过滤}：仅当候选的可靠下界已超过硬件上限时才予以拒绝，从构造上保证零误杀。
+其二，\textbf{可行性保持变异}：利用各因子的资源余量引导因子选择方向，并将越界子代投影回可行域，而非直接丢弃。
+本文严格以\textbf{引用}方式集成 Pruner（ASPLOS'25）的解析评分模型作为软排序先验，并将温度化相对标签作为辅助消融研究。
+在 [待补] 个算子、[待补] 张 GPU 上，完整系统将无效子代减少 [待补]\%、将达到目标性能所需时间缩短 [待补]\%，且最终 kernel 质量不退化（中位数退化小于 2\%）。
+\end{abstract}
+
+\keywords{张量程序调优；TVM；MetaSchedule；搜索空间；约束；可行性}
+
+\section{引言}
+
+深度学习编译器依赖自动调优为张量算子寻找高性能调度~\cite{ansor,metaschedule}。
+MetaSchedule 通过调度规则采样 tile 因子、缓存层级与绑定决策来生成候选调度，每个候选都要经过一条以后处理器 \texttt{VerifyGPUCode} 收尾的验证链：后者将调度 lowering 为 GPU 代码并检查资源约束~\cite{metaschedule}。
+
+这一设计的一个长期痼疾是：搜索预算的大部分被浪费在\textbf{非法}候选上。
+本文在 NVIDIA RTX 3050 Ti 上的基线测量（MatMul $128^3$）显示，种群初始化阶段采样的候选中有 $927/1024$ 被 \texttt{VerifyGPUCode} 拒绝，且每个被拒候选都已付出 trace 重放与 lowering 的代价~\cite{implplan}。
+进化阶段存在同样的问题：默认的 \texttt{MutateTileSize} 变异器执行的是均匀随机的因子交换，对资源上限毫无感知，因而产生大量非法子代并被静默丢弃。
+
+两条既有工作线处理的是相邻问题，但都未填补这一空白。
+Pruner（ASPLOS'25）证明了廉价解析公式可以在探索阶段替代学习代价模型，从而降低\textbf{打分}成本；然而其草稿模型只评估性能、从不检查合法性~\cite{pruner}。
+Heron（ASPLOS'23）将搜索空间重构为约束满足问题以强制约束，方法有效但需要对空间进行整体重建~\cite{heron}。
+与之不同，本文保留现有 MetaSchedule 机制，以\textbf{改造（retrofit）}的方式注入合法性感知：同一套结构资源分析同时服务于保守硬过滤、可行性保持变异，以及一个可选的解析重排先验。
+
+本文的贡献如下：
+
+\begin{itemize}
+\item \textbf{保守硬过滤（H）。}从调度结构（绑定关系与缓存读取放置）中提取每块线程数与共享内存用量，仅当候选的\textbf{下界}已超过硬件上限时才予以拒绝。由于估计是下界，该过滤器从构造上保证零误杀，且每次拒绝都能由 \texttt{VerifyGPUCode} 的相应子规则确认其非法性。
+\item \textbf{可行性保持变异（G）。}（i）将越界子代沿引发违规的因子方向二分收缩、投影回可行域；（ii）按各因子的资源余量偏置因子选择，使变异优先探索尚有裕量的方向。
+\item \textbf{Pruner 解析先验的集成（P），严格作为引用组件。}本文按论文公式重新实现 Pruner 的六个惩罚项~\cite{pruner}，仅将其用作学习代价模型输出上的软重排乘子，绝不作为合法性判据。
+\item \textbf{标签校准（L），作为辅助消融。}研究温度化相对标签 $y_i=(b_{\min}/c_i)^\gamma$，仅当其在小样本下稳定改善排序时才纳入系统。
+\end{itemize}
+
+本文明确\textbf{不}将 Pruner 公式或相对标签思想宣称为原创；二者均为已引用的外部组件~\cite{pruner}。本文的贡献在于共享约束分析、零误杀硬过滤边界，以及对现有变异器的改造。
+
+本文其余部分组织如下。第~\ref{sec:background}~节给出背景并以实测失败统计说明问题；第~\ref{sec:design}~节给出设计；第~\ref{sec:impl}~节描述实现；第~\ref{sec:eval}~节给出评估方法与结果；第~\ref{sec:related}~节讨论相关工作；第~\ref{sec:conclusion}~节总结。
+
+\section{背景与动机}
+\label{sec:background}
+
+\subsection{MetaSchedule 与候选验证}
+
+MetaSchedule 探索由调度规则（如 \texttt{MultiLevelTiling}）定义的空间：该规则对循环做拆分（例如 ``SSSRRSRS'' 结构下的 5 个空间因子与 3 个归约因子）、插入缓存读取、并把循环绑定到 \texttt{blockIdx}/\texttt{vthread}/\texttt{threadIdx}~\cite{metaschedule}。
+一个候选就是一条 trace：由若干带采样决策的调度指令组成。
+验证流程为：先重放 trace，再经过一条后处理器链，其中 \texttt{VerifyGPUCode} 将调度 lowering 为一条约 20 个 pass 的流水线，并检查 \texttt{max\_shared\_memory\_per\_block}、\texttt{max\_threads\_per\_block}、\texttt{max\_vthread} 与 \texttt{max\_vector\_bytes} 等约束。
+
+\subsection{拒绝采样痼疾}
+
+表~\ref{tab:motivation} 汇总了本文的基线插桩统计（单 seed，MatMul $128^3$，8 trials；仅属冒烟测试）。
+种群初始化拒绝了绝大多数候选，而进化阶段仍产生大量非法子代。
+每个被拒候选都已付出 trace 重放与至少部分后处理器链的成本。
+
+\begin{table}[t]
+\centering
+\caption{基线拒绝统计（MatMul $128^3$，RTX 3050 Ti，单 seed，冒烟测试）。}
+\label{tab:motivation}
+\begin{tabular}{lcc}
+\toprule
+阶段 & 生成数 & Verify 失败数 \\
+\midrule
+SampleInit & 1024 & 927 \\
+Evolve & 2023 & 257 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+注意：当前的 Verify 计数混合了线程数、共享内存、vthread、向量化与 lowering 异常，尚未给出按原因细分；这一细分是本文评估的第一步（第~\ref{sec:eval}~节）。
+
+\subsection{什么是廉价可知的，什么不是}
+
+两个主导合法性的量可以在不做 lowering 的情况下从调度结构计算得到：
+
+\begin{itemize}
+\item \textbf{每块线程数}：所有绑定到 \texttt{threadIdx.x/y/z} 的循环 extent 之积，直接从 trace 的 \texttt{Bind} 指令读出。该量是精确的。
+\item \textbf{共享内存字节数}：每个 \texttt{scope=shared} 的 \texttt{CacheRead} buffer 的足迹，等于其 \texttt{ComputeAt} 层级处的空间 tile 乘以内部归约 tile 再乘以元素字节数。从缓存放置读出时，该值等于 \texttt{CompactBufferAllocation} 压缩后的足迹；若忽略软件流水复制（$num\_stages$），该值构成\textbf{下界}。
+\end{itemize}
+
+下界性质是零误杀过滤的关键：若下界已超过上限，真实用量必然也超过上限，因此该候选本来就会被 \texttt{VerifyGPUCode} 拒绝。
+
+\section{设计}
+\label{sec:design}
+
+图~\ref{fig:flow} 给出完整数据流。同一套结构分析（第~\ref{sec:features}~节）服务于三个消费者：硬过滤 H、方向性变异 G，以及（间接地）解析先验 P。
+
+\begin{figure}[t]
+\centering
+\begin{tabular}{c}
+生成 / 变异 trace \\
+$\downarrow$ \\
+\textbf{H}：保守硬过滤（仅拒绝可证明非法者） \\
+$\downarrow$ \\
+\textbf{P}：Pruner 解析先验（软重排，引用） \\
+$\downarrow$ \\
+重放 $\rightarrow$ postproc $\rightarrow$ \texttt{VerifyGPUCode} \\
+$\downarrow$ \\
+\textbf{G}：余量引导因子选择与可行性投影（下一次变异） \\
+$\downarrow$ \\
+\textbf{C}：XGBoost 代价模型 \quad \textbf{L}：标签校准（消融） \\
+$\downarrow$ \\
+build $\rightarrow$ run
+\end{tabular}
+\caption{系统数据流。H 与 G 是本文贡献；P 是引用的外部先验；L 是辅助消融。}
+\label{fig:flow}
+\end{figure}
+
+\subsection{结构资源分析}
+\label{sec:features}
+
+本文在 trace 之上定义一个结构特征提取器：
+
+\begin{align}
+\text{每块线程数} &= \prod_{\text{绑定到 } threadIdx.* \text{ 的循环}} \text{extent}(\text{loop}), \label{eq:threads}\\
+\text{共享内存字节数} &= \sum_{\text{scope}=shared \text{ 的缓存块}} \text{tile\_size}(b) \cdot \text{dtype\_bytes}(b), \label{eq:shmem}
+\end{align}
+
+其中 $\text{tile\_size}(b)$ 为缓存块 \texttt{ComputeAt} 层级之外的（剔除网格绑定循环的）空间循环 extent 之积，乘以内部归约 extent。
+式~\eqref{eq:threads} 是精确的；式~\eqref{eq:shmem} 是真实用量的下界（软件流水级数会使其倍增，cooperative-fetch 改写只会使其变大）。
+每个量要么\textbf{已知}要么\textbf{未知}：所需绑定或缓存结构缺失或不可分析时即为未知，未知值绝不参与拒绝。
+
+\subsection{H：保守硬过滤}
+
+拒绝规则被刻意收窄为：
+
+\begin{equation}
+\text{拒绝} \iff (\text{线程已知} \land \text{线程数} > \text{max\_threads\_per\_block})
+\;\lor\; (\text{共享已知} \land \text{共享字节} > \text{max\_shared\_memory\_per\_block}).
+\label{eq:hard}
+\end{equation}
+
+上限从 \texttt{Target} 读取（\texttt{max\_shared\_memory\_per\_block}、\texttt{max\_num\_threads}），绝不针对某张 GPU 硬编码。
+占用率、warp 利用率与算存比\textbf{永不}进入拒绝条件——它们是性能信号而非合法性信号，据此硬拒会重新引入误杀问题。
+
+\begin{theorem}[零误杀]
+若式~\eqref{eq:threads}--\eqref{eq:shmem} 的估计是 \texttt{VerifyGPUCode} 所检查量的下界，则"仅当下界超过上限时才拒绝"不会拒绝任何 \texttt{VerifyGPUCode} 会接受的候选。
+\end{theorem}
+
+\begin{proof}
+对任一被接受的候选，其被检值 $v$ 满足 $v \le L$，其中 $L$ 为上限。因估计值 $e$ 是下界，故 $e \le v \le L$，于是拒绝条件 $e > L$ 永不成立。
+\end{proof}
+
+该过滤器布设在两个位置：\emph{H-early}，位于 trace 重放之后、完整后处理器链之前（为重采样候选省下重放成本、为被拒候选省下 postproc 成本）；\emph{H-late}，紧邻 \texttt{VerifyGPUCode} 之前（覆盖仅能从重放完成后的 IR 机械读出的子类）。
+
+\subsection{P：Pruner 解析先验（引用）}
+
+本文按论文公式重新实现 Pruner 的 Symbol-based Analyzer 的六个惩罚项~\cite{pruner}：
+
+\begin{align}
+P_{l0,m} &= \min\left(\frac{m_{l0}}{S_1}, 1\right), & P_{l0,c} &= 1 + \frac{S_2}{S_1}, \\
+P_{l1,m} &= \min\left(\frac{m_{l1}}{S_3}, 1\right), & P_{l1,c} &= \frac{sch_{l1}}{\lceil sch_{l1}/pu_{l1}\rceil \cdot pu_{l1}}, \\
+P_{l2,c} &= \frac{S_6}{\lceil S_6/pu_{l2}\rceil \cdot pu_{l2}}, & P_{l2,m} &= \frac{S_7}{\lceil S_7/n_{l2}\rceil \cdot n_{l2}},
+\end{align}
+
+并如 Pruner 式~(1) 那样将其合成为草稿分数。
+该分数仅作为学习代价模型输出上的\textbf{软重排}乘子参与：
+
+\begin{equation}
+\log(\text{最终分}) = \log(\max(\text{xgb}, \epsilon)) + \beta \cdot \log(\max(\text{草稿}, \epsilon)),
+\label{eq:combine}
+\end{equation}
+
+并保留 $\epsilon=10\%$ 的均匀随机探索比例，防止经验公式将搜索锁死。
+当任一惩罚项无法通用提取时，草稿分数为\textbf{未知}，贡献中性因子 $1.0$——本文绝不用算子专属的下标约定（如"第二个 split 因子就是线程因子"）冒充通用结构。
+
+\subsection{G：可行性保持变异}
+
+默认 \texttt{MutateTileSize} 均匀挑选两个因子并交换一个除数，没有任何机制阻止非法子代产生。
+本文以两个机制对其改造。
+
+\subsubsection{G1：可行性投影}
+
+变异之后，若子代违反式~\eqref{eq:hard}，则沿引发违规的因子的除数格做二分收缩，直到估计回到可行域为止。
+由于放大某因子不会减少其供给的资源，收缩是单调的、必然终止；20 次迭代仍不成功时回退到父代（绝不产出非法子代）。
+仅使用由 \texttt{Bind}/\texttt{CacheRead} 结构推导的因子—资源边，不做任何按位置硬编码。
+
+\subsubsection{G2：余量引导选择}
+
+变异之前，先计算各资源的余量 $m_r = (L_r - u_r)/L_r$，$r \in \{\text{线程数}, \text{共享内存}\}$。
+以 $1-\epsilon$ 的概率，在被放大因子的可行除数中选择草稿分数增量最大者；以 $\epsilon$ 的概率在可行除数中均匀选取。
+这样既把探索偏向尚有裕量的方向，又保留多样性。
+
+\subsection{L：标签校准（消融）}
+
+TVM 已经以相对标签 $y_i = b_{\min}/c_i$ 训练 XGBoost。
+本文研究单参数族
+
+\begin{equation}
+y_i(\gamma) = \left( \frac{b_{\min}}{c_i} \right)^\gamma, \qquad \gamma \in \{0.5, 0.75, 1.0, 1.5, 2.0\},
+\label{eq:label}
+\end{equation}
+
+其中 $\gamma=1$ 与 TVM 默认一致。
+仅当 L 在 128/256 样本下稳定改善排序且不损害 time-to-target 时才进入最终系统；否则保持 $\gamma=1$ 并将 L 作为负结果消融如实报告。
+
+\section{实现}
+\label{sec:impl}
+
+全部机制在 TVM MetaSchedule（$0.26$ 开发版）中实现为相互独立的开关：
+
+\begin{itemize}
+\item \texttt{TVM\_PRUNE\_MODE}：硬过滤 off/shadow/enforce。
+\item \texttt{TVM\_DRAFT\_MODE}：先验 off/shadow/rank，配 \texttt{TVM\_DRAFT\_BETA} 与 \texttt{TVM\_DRAFT\_EPS}。
+\item \texttt{TVM\_GA\_T2\_MODE}：变异 off/shadow/project/directed。
+\item \texttt{label\_gamma}：XGBoost 模型的构造参数。
+\end{itemize}
+
+shadow 模式只计算并记录决策、不改变行为，且必须在固定 seed 下与 off 模式的轨迹完全一致；这一 RNG 等价性在任何性能对比之前强制通过。
+结构提取器（式~\eqref{eq:threads}--\eqref{eq:shmem}）放在 H 与 G 共用的独立模块中，使硬过滤与变异预算基于完全相同的信息。
+Pruner 先验是独立模块，按论文公式 clean-room 重新实现，硬件参数从 \texttt{Target} 或按设备配置表读取；参数缺失时返回中性分数 $1.0$。
+每次运行把 git 身份、DLL 哈希、Target 属性、seed 与超参数写入逐次运行的 \texttt{result.json}，并按阶段（\texttt{SampleInit}、\texttt{Evolve}、\texttt{PickBest}）记录全部计数（生成数、硬拒数、各 postproc 失败数、按原因的 Verify 失败数、变异投影数）。
+
+\section{评估}
+\label{sec:eval}
+
+\subsection{方法}
+
+\emph{算子集。}开发集：GEMM $128^3$ 与 $512^3$、一个 $1024\times1024$ 归约（绝不进入最终表格）。正式集：GEMM $256^3$ 与 $1024^2\times4096$；Conv2D（$R{=}S{=}3$）；Reduction；Softmax；LayerNorm；Add+ReLU，各两个 shape。
+\emph{硬件。}开发与正确性验证用 RTX 3050 Ti（$sm\_86$）；正式结果用 NVIDIA A100（$sm\_80$）。
+\emph{seed 与预算。}5 个固定 seed $\{20260902,\dots,20260906\}$；每臂 256 trials，每 32 trials 存 checkpoint；按算子跨臂配对比较。
+\emph{统计。}中位数与 IQR；bootstrap 95\% 置信区间；需要显著性时用配对 Wilcoxon 并同时报告效应量；单 seed 或 8 trials 只标注冒烟测试，绝不作为结论。
+
+\subsectioan{实验}
+
+\begin{itemize}
+\item \textbf{E0（失败画像）。}分阶段、分原因的 Verify 失败分布，以及每类失败的 replay/postproc 成本；用于确定 H 与 G 应优先覆盖哪类失败。
+\item \textbf{E1（硬过滤正确性）。}对全部可重放、有限实测的历史记录与新生成候选审计零误杀；边界用例（1023/1024 通过、1025 拒绝）与多轴/重复轴/动态 extent 测试；每次 H 拒绝均须由对应 Verify 子规则确认。
+\item \textbf{E2（先验质量）。}P 的离线 Spearman $\rho$、NDCG@16、top-16 召回、已知覆盖率与单候选开销；开发集上对 $\beta$ 与探索比例做在线扫参，正式运行前冻结。
+\item \textbf{E3（方向性 GA）。}变异后 Verify 通过率、每代唯一合法后代数、回退父代比例、每千次变异的非法子代数；SampleInit 与 Evolve 分开报告。
+\item \textbf{E4（标签校准）。}按 trace 哈希去重、5 次随机划分，在 32/64/128/256 样本档画离线学习曲线；确定 L 进入完整系统的门槛。
+\item \textbf{E5（模块消融）。}六臂：B、P、H、H+G、H+P+G、FULL，同一 seed 列表与预算。
+\item \textbf{E6（端到端）。}time-to-target（参考最优的 90/95/99\%）、best-so-far AUC、最终最优延迟与搜索成本分解。
+\end{itemize}
+
+\subsection{结果}
+
+[待补 —— 全部表格与图待正式实验后填写。计划图表：失败原因分解；H 的正确性与覆盖率；P 的排序质量；G 的非法子代下降；标签学习曲线；六臂端到端总表；best-so-far 对实测次数与墙钟时间的曲线。]
+
+\section{相关工作}
+\label{sec:related}
+
+\textbf{张量程序调优。}Ansor~\cite{ansor} 对计算图分层划分，并以学习代价模型引导的进化搜索逐子图调优。MetaSchedule~\cite{metaschedule} 把调优形式化为基于调度原语的随机调度生成，是本文的平台与基线。二者都不在后处理之前拒绝可证明非法的候选。
+
+\textbf{解析草稿。}Pruner~\cite{pruner} 提出 Draft-then-Verify：以八个硬件感知符号与六个惩罚项构成的 Symbol-based Analyzer 在探索阶段替代学习代价模型，再由 pattern-aware transformer 对草稿出的 top-$k$ 候选做验证。本文仅将其公式作为已引用的软排序先验复用；Pruner 不做合法性过滤，其变异也不保持可行性。
+
+\textbf{约束化搜索。}Heron~\cite{heron} 将搜索空间形式化为约束满足问题并在 CSP 上进化，全程保持约束；但需要对空间做整体重建。本文是对现有 MetaSchedule 变异器的 retrofit，且零手写算子专属规则。Kernel Tuner 基于 CSP 的空间构造~\cite{kerneltuner} 面向通用调参，缺乏编译器级的内存层级语义。Roller~\cite{roller} 按硬件特征构造 rTile 而非搜索，但覆盖不了完整调度空间。
+
+\textbf{代价模型特征与标签。}TenSet~\cite{tenset} 收集大规模离线数据集用于可迁移代价模型；TLP~\cite{tlp} 以时序调度原语特征配合 Transformer。本文的标签研究（$\gamma$）只是 TVM 现有相对标签之上的窄消融，不是新的代价模型架构。
+
+\section{结论}
+\label{sec:conclusion}
+
+本文表明：将一套结构资源分析 retrofit 进 MetaSchedule，可以同时得到（i）零误杀的硬过滤与（ii）可行性保持的变异，并且 Pruner 的解析公式可作为引用的软先验叠加于二者之上。该设计在构造上就是保守的：每次拒绝都可由证明确认非法，每次变异要么保持可行、要么被投影回可行域。评估部分按模块及组合度量无效候选的减少与 time-to-target 的缩短，同时不损害最终 kernel 质量。[待补跨算子与跨 GPU 的通用性结论。]
+
+\section*{致谢}
+[待补]
+
+\begin{thebibliography}{99}
+
+\bibitem{ansor} Zheng L, Jia C, Sun M, et al. Ansor: Generating High-Performance Tensor Programs for Deep Learning[C]//Proceedings of the 14th USENIX Symposium on Operating Systems Design and Implementation (OSDI). 2020: 863-879.
+
+\bibitem{metaschedule} Shao J, Zhou X, Feng S, et al. Tensor Program Optimization with Probabilistic Programs[C]//Advances in Neural Information Processing Systems (NeurIPS). 2022.
+
+\bibitem{implplan} 本文内部实施与实验方案. IMPLEMENTATION\_EXPERIMENT\_PLAN.md. 2026. % 投稿时改为对正文的引用或删除
+
+\bibitem{pruner} Qiao L, Shi J, Hao X, et al. Pruner: A Draft-then-Verify Exploration Mechanism to Accelerate Tensor Program Tuning[C]//Proceedings of the 30th ACM International Conference on Architectural Support for Programming Languages and Operating Systems (ASPLOS). 2025. arXiv:2402.02361.
+
+\bibitem{heron} Heron: Automatically Constrained High-Performance Library Generation for Deep Learning Accelerators[C]//ASPLOS. 2023. % 待核实：作者列表与页码
+
+\bibitem{roller} Zhu H, Wu R, Diao Y, et al. ROLLER: Fast and Efficient Tensor Compilation for Deep Learning[C]//OSDI. 2022: 233-248. % 页码待核实
+
+\bibitem{kerneltuner} Efficient Construction of Large Search Spaces for Auto-Tuning[C]. 2025. % 待核实：确切标题、会议与作者
+
+\bibitem{tenset} Zheng L, et al. TenSet: A Large-scale Program Performance Dataset for Learned Tensor Compilers[C]//NeurIPS. 2021. % 待核实：作者与页码
+
+\bibitem{tlp} TLP: 基于时序调度原语特征的代价模型[C]. % 待核实：确切标题、会议、年份与作者
+
+\end{thebibliography}
+
+\end{document}

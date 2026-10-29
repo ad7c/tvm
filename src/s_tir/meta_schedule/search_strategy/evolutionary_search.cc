@@ -1866,6 +1866,28 @@ TVM_FFI_STATIC_INIT_BLOCK() { EvolutionarySearchNode::RegisterReflection(); }
 TVM_FFI_STATIC_INIT_BLOCK() {
   namespace refl = tvm::ffi::reflection;
   refl::GlobalDef()
+      .def("s_tir.meta_schedule.testing.ScoutReplay",
+           [](EvolutionarySearch search, ffi::Optional<s_tir::Trace> trace) {
+             TVM_FFI_CHECK(search->state_ != nullptr, ValueError) << "Call pre_tuning first";
+             auto& state = *search->state_;
+             auto& data = state.per_thread_data_.at(0);
+             if (!trace.has_value()) {
+               if (state.design_spaces.empty()) return ffi::Optional<Schedule>();
+               int index = s_tir::SampleInt(&data.rand_state, 0, state.design_spaces.size());
+               trace = s_tir::Trace(state.design_spaces[index]->insts, {});
+             }
+             ThreadedTraceApply pp(search->postprocs_, search->ctx_->target);
+             return pp.Apply(data.mod, trace.value(), &data.rand_state);
+           })
+      .def("s_tir.meta_schedule.testing.ScoutMutate",
+           [](EvolutionarySearch search, s_tir::Trace trace) {
+             TVM_FFI_CHECK(search->state_ != nullptr, ValueError) << "Call pre_tuning first";
+             auto& data = search->state_->per_thread_data_.at(0);
+             data.Set(std::vector<double>{1.0}, 1.0, search->mutator_probs_);
+             auto mutator = data.mutator_sampler();
+             if (!mutator.has_value()) return ffi::Optional<s_tir::Trace>();
+             return mutator.value()->Apply(trace, &data.rand_state);
+           })
       .def("s_tir.meta_schedule.SearchStrategyEvolutionarySearch",
            SearchStrategy::EvolutionarySearch)
       .def("s_tir.meta_schedule.SearchStrategyEvolutionarySearchSampleInitPopulation",

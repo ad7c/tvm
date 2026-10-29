@@ -330,6 +330,8 @@ class PrunerDraftFeatureExtractor : private StmtExprVisitor {
       } else if (StartsWith(store->buffer.scope(), "shared")) {
         auto [shared_workload, shared_known] = MemoryWorkload(access.indices, store_axes);
         feature.shared_memory_footprint += shared_workload * feature.block_size;
+        feature.shared_memory_bytes_proxy += shared_workload * feature.block_size *
+                                             store->buffer->dtype.bytes();
         feature.dram_workload += feature.shared_memory_footprint * feature.grid_size;
         feature.known = feature.known && shared_known;
         break;
@@ -452,6 +454,32 @@ std::vector<double> ApplyPrunerDraftScores(const std::vector<double>& learned_sc
 TVM_FFI_STATIC_INIT_BLOCK() {
   namespace refl = tvm::ffi::reflection;
   refl::GlobalDef()
+      .def("s_tir.meta_schedule.testing.ScoutDraftFeatures", [](IRModule mod) {
+        // Explicit profile for this experimental FP32/sm_86 study.
+        PrunerDraftHardwareProfile profile{10752.0, 192.0, 20, 1, 4, 32, 128.0};
+        auto rows = PrunerDraftFeatureExtractor::Extract(mod, 32);
+        auto score = ScorePrunerDraftFeatures(rows, profile);
+        double threads = 0, grid = 0, registers = 0, shared = 0, reuse = 0, work = 0;
+        bool known = score.known;
+        for (const auto& row : rows) {
+          if (!row.is_gpu) continue;
+          known = known && row.known;
+          threads = std::max(threads, row.block_size);
+          grid = std::max(grid, row.grid_size);
+          registers = std::max(registers, row.register_usage);
+          shared = std::max(shared, row.shared_memory_bytes_proxy);
+          double weight = std::max(0.0, row.compute_workload);
+          reuse += weight * row.data_reuse_penalty;
+          work += weight;
+        }
+        // 1/score is the legacy nominal millisecond proxy, not calibrated latency.
+        // The existing per-buffer overwrite aggregation is intentionally retained.
+        return ffi::Array<double>{static_cast<double>(known), score.score,
+                                  std::log1p(threads), std::log1p(grid / 20.0),
+                                  std::log1p(registers / 128.0),
+                                  std::log1p(shared / 49152.0),
+                                  std::log1p(work > 0 ? reuse / work : 1.0)};
+      })
       .def("s_tir.meta_schedule.testing.ScorePrunerDraftStatement",
            [](double compute_workload, double register_usage, double dram_workload,
               double data_reuse_penalty, double grid_size, double block_size, double peak_gflops,

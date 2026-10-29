@@ -17,6 +17,11 @@
 
 <img src=https://raw.githubusercontent.com/apache/tvm-site/main/images/logo/tvm-logo-small.png width=128/> Open Machine Learning Compiler Framework
 ==============================================
+
+**Scout research branch `scout-1029-opt`:** see [Scout setup and ResNet-18 reproduction guide](experiments/README_SCOUT_1029.md)
+for supported hardware, a fresh-machine build, fixed model assets, checks, and experiment commands.
+The feedback-GA implementation has passed local checks; its end-to-end performance study is pending.
+
 [Documentation](https://tvm.apache.org/docs) |
 [Contributors](CONTRIBUTORS.md) |
 [Community](https://tvm.apache.org/community) |

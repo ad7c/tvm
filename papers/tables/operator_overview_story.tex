@@ -1,0 +1,21 @@
+% Generated from the frozen report; latency = independently retimed median.
+% Source SHA256: 32b22c8a529af34f8b22a9bfd7397a15e93341e689830e89ff46a5cdcd1cc663
+\begin{table*}[tbp]
+\centering
+\caption{同一提交预算下的完整调优时间与最终候选延迟。延迟为固定原最佳候选独立重测的中位数，每种配置 30 个技术样本。}
+\label{tab:operator-overview}
+\small
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}llrrrrrr@{}}
+\toprule
+ & & \multicolumn{3}{c}{完整调优时间 (s)} & \multicolumn{3}{c}{重测中位数 ($\mu$s)} \\
+\cmidrule(lr){3-5}\cmidrule(l){6-8}
+负载 & GA & B & C & D & B & C & D \\
+\midrule
+MatMul128 & 1 & 790.2 & 778.7 & 773.1 & 31.70 & 31.87 & 34.06 \\
+MatMul128 & 4 & 765.0 & 817.1 & 811.6 & 37.53 & 36.15 & 35.10 \\
+MatMul256 & 1 & 803.0 & 867.3 & 783.9 & 31.49 & 44.14 & 34.41 \\
+Conv2D & 1 & 794.4 & 809.3 & 834.9 & 37.79 & 37.64 & 37.69 \\
+Reduction & 1 & 665.3 & 665.4 & 628.3 & 35.96 & 36.84 & 32.42 \\
+\bottomrule
+\end{tabular*}
+\end{table*}

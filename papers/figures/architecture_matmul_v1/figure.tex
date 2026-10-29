@@ -1,0 +1,7 @@
+% Proposed single-column replacement for the current architecture figure.
+\begin{figure}[tbp]
+\centering
+\includegraphics[width=\columnwidth]{figures/architecture_matmul_v1/architecture_matmul.pdf}
+\caption{以矩阵乘为例的 Scout 编译与调优流程。CS+H 在候选生成和回放过程中前移约束判定；GA 内用 Draft 解析评分指导进化并更新跨代归档，随后由代价模型对入围候选精筛。候选经过后端 lowering、代码生成和编译后在硬件上实测，性能反馈用于更新模型和后续搜索，预算结束时返回最佳候选。循环为示意片段，As/Bs 表示共享内存分块，c 表示局部累加器；省略索引展开、缓存加载、同步及写回。}
+\label{fig:architecture-matmul-proposal}
+\end{figure}

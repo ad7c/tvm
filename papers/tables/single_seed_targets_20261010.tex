@@ -1,0 +1,33 @@
+% Auto-generated from audited summary.json; do not edit numeric cells.
+% Source SHA256: 32b22c8a529af34f8b22a9bfd7397a15e93341e689830e89ff46a5cdcd1cc663
+% Regenerate with experiments/export_single_seed_paper_tables.py.
+\begin{table*}[tb]
+\centering
+\caption{全部目标阈值的达标提交数 / 完整 Tune 秒数：一个搜索 seed，每臂 32 submitted。NR(截止秒数) 表示预算耗尽仍未达标。MatMul128 的 40/50\,$\mu$s 为预定目标；扩展算子的三档目标为各自 baseline 调优终点的 1/1.01/1.05 倍，属于回顾性描述。整批 callback 完成后才判定达标，不插值，准备时间单列；目标依据调优观测，独立原赢家重测不回填本表。}
+\label{tab:single-targets}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrr}
+\toprule
+算子 / GA & \shortstack{目标\\($\mu$s)} & \shortstack{B\\提交 / Tune (s)} & \shortstack{C\\提交 / Tune (s)} & \shortstack{D\\提交 / Tune (s)} \\
+\midrule
+MatMul128 / 1 & 40.0000 & 4 / 128.634 & 4 / 118.522 & 4 / 120.822 \\
+ & 50.0000 & 4 / 128.634 & 4 / 118.522 & 4 / 120.822 \\
+\midrule
+MatMul128 / 4 & 40.0000 & 4 / 113.543 & 24 / 628.530 & 4 / 121.206 \\
+ & 50.0000 & 4 / 113.543 & 4 / 126.508 & 4 / 121.206 \\
+\midrule
+MatMul256 / 1 & 32.8173 & 32 / 802.979 & NR(867.306) & NR(783.873) \\
+ & 33.1455 & 28 / 702.860 & NR(867.306) & NR(783.873) \\
+ & 34.4582 & 12 / 312.693 & NR(867.306) & 4 / 124.729 \\
+\midrule
+Conv / 1 & 34.3407 & 4 / 127.076 & 4 / 126.255 & NR(834.919) \\
+ & 34.6841 & 4 / 127.076 & 4 / 126.255 & NR(834.919) \\
+ & 36.0577 & 4 / 127.076 & 4 / 126.255 & 20 / 554.838 \\
+\midrule
+Reduction / 1 & 35.7334 & 16 / 338.406 & NR(665.380) & 32 / 628.301 \\
+ & 36.0907 & 16 / 338.406 & NR(665.380) & 32 / 628.301 \\
+ & 37.5201 & 12 / 263.545 & 4 / 102.552 & 4 / 96.277 \\
+\bottomrule
+\end{tabular}
+\end{table*}

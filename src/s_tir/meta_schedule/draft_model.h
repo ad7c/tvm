@@ -53,6 +53,8 @@ struct PrunerDraftStatementFeatures {
   double register_usage{0.0};
   double memory_workload{0.0};
   double shared_memory_footprint{0.0};
+  // Byte-valued companion for calibration; legacy scoring stays unchanged.
+  double shared_memory_bytes_proxy{0.0};
   double dram_workload{0.0};
   double data_reuse_penalty{1.0};
   double is_gpu{0.0};

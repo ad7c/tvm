@@ -1,0 +1,18 @@
+% Auto-generated from audited summary.json; do not edit numeric cells.
+% Source SHA256: 32b22c8a529af34f8b22a9bfd7397a15e93341e689830e89ff46a5cdcd1cc663
+% Regenerate with experiments/export_single_seed_paper_tables.py.
+\begin{table*}[tb]
+\centering
+\caption{MatMul128 的 GA 密度与评分开销：同一搜索 seed，每臂 32 submitted。预测节省与 Tune 减少均比较 C（CS+H）到 D（CS+H+粗筛）；粗筛自身评分和 XGBoost 预测已嵌套于 Search，不能重复加入总 Tune。}
+\label{tab:single-ga}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{rrrrrrr}
+\toprule
+GA & \shortstack{XGB 输入\\C$\to$D} & \shortstack{C 预测\\(s)} & \shortstack{D 预测\\(s)} & \shortstack{预测节省\\(s)} & \shortstack{D 粗筛评分\\(s)} & \shortstack{Tune 减少\\(\%)} \\
+\midrule
+1 & $512\to64$ & 2.560564 & 0.333087 & 2.227477 & 0.079086 & 0.72 \\
+4 & $1280\to64$ & 6.427177 & 0.330386 & 6.096791 & 0.223606 & 0.67 \\
+\bottomrule
+\end{tabular}
+\end{table*}

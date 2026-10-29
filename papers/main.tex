@@ -1,0 +1,359 @@
+% 中文实证工作稿，更新：2026-10-08；使用 XeLaTeX 编译两遍。
+% 数据依据：experiments/EXPERIMENT_PLAN_20261008.md
+% 图表来源：papers/figures/pilot_20261008/manifest.json
+% 两 seed CUDA pilot，加固定完整 trace 池的 CPU 机制实验；不把后者当 GPU 测量。
+\documentclass[11pt,twocolumn]{ctexart}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage[hidelinks]{hyperref}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\IfFileExists{placeins.sty}{\usepackage{placeins}}{\newcommand{\FloatBarrier}{\clearpage}}
+\emergencystretch=3em
+\newcommand{\pending}{\textit{待测}}
+\newcommand{\plannedpanel}[2]{%
+  \fbox{\begin{minipage}[c][#1][c]{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}
+  \centering\small\textbf{待补实验}\par\medskip #2
+  \end{minipage}}}
+
+\title{\bfseries Scout：约束引导采样与分级筛选的张量程序自动搜索调优}
+\author{作者姓名 \\ \small 单位}
+\date{}
+\begin{document}
+\maketitle
+
+\begin{abstract}
+张量程序是实现矩阵乘、卷积和归约等深度学习算子的基础，其执行性能直接影响模型推理效率。通过调优循环切分、数据布局和并行映射等调度决策，可以改善目标硬件的资源利用，因此张量程序调优是提升深度学习计算性能的关键环节。目前，以 Ansor 和 MetaSchedule 为代表的基于搜索的自动调优方法已得到广泛应用，但仍面临候选空间庞大、搜索效率低和调优成本高等问题。针对上述问题，本文提出约束引导的张量程序自动调优框架 Scout，将硬件约束与分级筛选相结合，从搜索空间约束和候选评估两个方面减少无效探索与评估开销，提高有限测量预算下的搜索效率。我们将 Scout 集成到 TVM 编译器中，并在矩阵乘、卷积和归约等典型算子上开展实验。实验结果表明，Scout 的剪枝配置在达到基线搜索终点的延迟目标时取得最高 1.99 倍的调优加速，对应耗时减少 49.7\%；分级筛选配置相较剪枝配置，将学习代价模型评分耗时最高降低 91.4\%。
+\end{abstract}
+
+\section{引言}
+\label{sec:intro}
+深度学习加速器（GPU、NPU 等）推动了深度神经网络在自动驾驶、增强现实等领域的广泛应用。为提升模型推理速度，张量程序优化已成为最大化硬件计算效率的关键环节。现有深度学习框架将网络表示为计算图（节点对应卷积、矩阵乘等算子），并把算子映射到针对特定硬件手工优化的算子库（如 cuDNN、MKL-DNN）。然而，针对每类硬件、每个算子手工调优算子库，需要极强的专业知识和巨大的人力投入，严重阻碍了新型算子与定制化硬件的高效开发与迭代。
+
+基于搜索的深度学习编译器（如 Ansor、MetaSchedule）是近年来更具扩展性的自动化方案。针对给定算子，它定义一个调度搜索空间，从中搜索适配目标硬件的最优编译后张量程序；搜索过程的核心是代价模型，用于预估候选程序的性能，从而减少耗时的硬件实测环节。
+
+随着调度空间规模与算子种类的增长，基于搜索的编译器面临以下挑战：
+
+第一，\textbf{搜索探索机制效率低下}。现有流程在采样、回放与验证之后才发现大量候选违反资源约束，将计算消耗在最终被丢弃的非法候选上。在本文的基线测量中，约 $80\%$ 的生成候选在经历回放、后处理与 lowering 之后才被 VerifyGPUCode 拒绝。
+
+第二，\textbf{可学习代价模型导致搜索过程耗时}。现有方法在进化循环内的打分阶段，对所有候选逐一调用可学习代价模型、提取特征并完成推理，带来高昂的推理耗时与推理开销，成本远高于固定解析公式，使搜索过程耗时长。
+
+针对上述问题，本文提出“剪枝+分级筛选”的约束引导搜索框架。剪枝即空间剪枝，把可证明的线程契约判定前移到采样与回放阶段：约束引导采样（CS）在采样决策点枚举并剔除必然违反线程契约的决策，从源头减少非法候选；分层硬筛（H）在回放前后对候选做线程判定，拦截可证明违规的候选，二者共同优化搜索空间、提高有效候选占比。分级筛选让代价模型不再参与进化迭代，而是分级评分——先用廉价的解析评分对候选初次粗筛，迭代结束后再用代价模型对入围候选细筛，从而加速调度搜索流程。
+
+我们将 Scout 集成进 TVM 编译器，并在 MatMul128/256、标准卷积与大归约等算子上开展实验。结果表明，剪枝将候选生成次数减少约 62\%、Verify 失败减少约 85\%，有效候选占比由约 24\% 提升到约 70\%；分级筛让进化循环内不再调用代价模型，大幅削减了代价模型推理开销（数值留白待补）。多模型、端到端与多轮调优的实验结果显示（留白待补）。
+
+本文的主要贡献可总结如下：
+\begin{itemize}[leftmargin=1.6em]
+\item \textbf{约束引导的搜索框架。}将可证明的线程约束判定前移，根据硬件参数（线程契约、每块线程上限、warp size）动态调整搜索空间，在采样决策点与回放阶段剪除违反约束的候选，从源头减少非法候选、提高剪枝有效性。
+\item \textbf{分级筛选。}在进化迭代中以基于硬件参数的轻量解析评分对候选粗筛打分，再由学习代价模型对入围候选做二级精筛，在加快调优速度的同时保持调优效果，并降低代价模型的训练复杂度。
+\end{itemize}
+
+\section{背景}
+\label{sec:background}
+
+\subsection{张量程序调优}
+深度学习模型的推理性能由两个层面的优化共同决定：一是图级优化，即在计算图上做算子融合、常量折叠、量化等变换；二是算子级优化，即对卷积、矩阵乘、归约等张量算子做面向硬件的调度优化，这正是张量程序调优的核心。张量程序的性能由循环切分、线程与寄存器绑定、向量化、数据复用与缓存放置等调度决策决定，同一算子在相同硬件上因调度不同、性能可相差数十倍。
+
+张量程序调优的做法大致经历三个阶段。最传统的是手工调优：由专家针对特定硬件手写高性能算子库（如 cuDNN、cuBLAS、MKL-DNN），性能最优但人力成本极高、难以扩展到新算子与新硬件。随后出现基于领域专用语言的模板方法：Halide~\cite{halide} 首次把算法与调度解耦，让开发者以独立于算法的语言描述并行、局部性与向量化；TVM~\cite{tvm} 将这一思想推广到深度学习算子，引入 \texttt{split}、\texttt{reorder}、\texttt{bind} 等调度原语与张量化，但编写高效模板仍依赖专家经验。
+
+这促使自动化调优的兴起：把“写调度”变为“搜调度”，由编译器在预定义的调度搜索空间中自动寻找最优调度，并用代价模型指导搜索、减少昂贵的硬件实测。
+
+\subsection{基于搜索的AI编译器}
+基于搜索的编译器是自动化调优的代表性实现，主流系统在搜索空间的表达方式与搜索策略上各有侧重。多面体编译（如 Tiramisu~\cite{tiramisu}、Tensor Comprehensions）把循环变换建模为整数仿射变换，在多面体模型上枚举合法的变换组合，可系统化地搜索并行与局部性优化，但对非规则控制流与复杂访存支持有限。TVM~\cite{tvm} 的 AutoTVM 采用“模板 + 学习代价模型”：模板定义候选实现的合法调度集合，代价模型（如 XGBoost）预估性能、以贝叶斯或遗传搜索挑选候选。Ansor~\cite{ansor} 去掉手工模板、用分层搜索空间（sketch 与 annotation）覆盖更广的调度。MetaSchedule~\cite{metaschedule} 用概率程序表达调度规则，把采样、变异与进化搜索统一。Triton~\cite{triton} 面向 GPU 提供类 Python 的块级编程接口，把块内调度交给编译器自动生成，兼顾可编程性与自动优化。本文的工作建立在 MetaSchedule 之上，其搜索流水线为：调度规则采样生成候选，经回放与后处理构造 S-TIR，\texttt{VerifyGPUCode} 验证资源合法性，再由学习代价模型打分、进化搜索择优，少量候选经 \emph{Builder} 编译、\emph{Runner} 实测并回填代价模型，整体工作流如图~\ref{fig:tuning-landscape} 所示。
+
+\begin{figure}[tb]
+\centering
+\includegraphics[width=\columnwidth]{figures/pilot_20261008/tensor_program_tuning.png}
+\caption{张量程序自动调优工作流。张量计算与目标硬件共同确定调度搜索空间；预算受限的调优循环生成候选、编译验证并实测，用测量反馈更新搜索状态与代价模型，最终返回最佳实测的合法候选。}
+\label{fig:tuning-landscape}
+\end{figure}
+
+\subsection{基于搜索技术的局限}
+尽管基于搜索的编译器比手工调优更便捷，但针对每个新算子、每类新硬件往往需要重新搜索、难以泛化，且搜索效率仍面临三方面局限。其一，搜索空间有效候选少：仅 MatMul $128^3$ 的 \texttt{SamplePerfectTile} 因式分解就有数百万种组合，其中绝大多数违反硬件资源约束。其二，失败大多集中在事前的浪费：候选直到回放与 lowering 验证之后才被判非法，无效候选在昂贵的后期阶段才被丢弃。其三，代价模型更迭成本高：进化搜索的每一代都要对种群调用学习代价模型，特征提取与推理开销随候选规模增长，且模型需要反复训练。
+
+表~\ref{tab:invalid-ratio} 报告了一次基线搜索的候选去向：约 $81\%$ 的生成候选最终被 \texttt{VerifyGPUCode} 拒绝，其中约 $91\%$ 是线程契约违规，有效候选仅占约 $19\%$。综上，现有搜索技术的核心局限可归纳为三点：（1）搜索空间有效候选少；（2）失败大多集中在事前的浪费；（3）代价模型更迭成本高、在 GA 过程中训练复杂。这正是本文要解决的问题。
+
+\begin{table}[tb]
+\centering
+\caption{Candidate outcomes of one baseline search (MatMul $128^3$, seed S31).}
+\label{tab:invalid-ratio}
+\begin{tabular}{lr}
+\toprule
+Outcome & Count \\
+\midrule
+Generated candidates & 1303 \\
+Passed postprocessing & 243 \\
+Rejected by VerifyGPUCode & 1060 \\
+\quad Thread constraint & 970 \\
+\quad Shared memory & 60 \\
+\quad Lowering exception & 30 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{方法}
+\label{sec:design}
+
+本文提出的系统整体流程如图~\ref{fig:architecture} 所示：首先通过剪枝约束搜索空间，在采样与回放阶段前移线程契约判定、减少非法候选；初始化得到合法候选种群后进入 GA 迭代优化候选，此过程中以解析评分对候选做粗排序、指导变异方向；迭代若干轮后，将候选交由学习代价模型做最终裁定评分，并选出少量候选上机编译实测。下面分别介绍剪枝与分级筛选两个核心组件。
+
+\begin{figure*}[tb]
+\centering
+\includegraphics[width=\linewidth]{figures/architecture_matmul_wide/architecture_matmul.png}
+\caption{系统整体架构。剪枝（CS+H）约束搜索空间、提高有效候选占比；初始化得到合法种群后进行 GA 迭代，以解析评分粗筛指导变异方向；批末由代价模型精筛排序，最终上机实测，实测反馈回更新代价模型。}
+\label{fig:architecture}
+\end{figure*}
+
+\subsection{剪枝：约束引导采样与分层硬筛}
+循环切分与线程绑定共同决定候选调度的并行配置。传统搜索先生成这些决策，再通过调度回放构造候选程序，最后由后处理检查其合法性。因此，即使线程配置已经超出设备限制，候选仍可能消耗完整的回放和验证开销。Scout 将线程约束前移到候选生成过程：约束引导采样（CS）在采样时缩小决策域，分层硬筛（H）在回放前后检查已有候选。二者共用硬件参数推导的线程约束，分别作用于新决策的生成与已有决策的筛选。
+
+\paragraph{硬件约束表示}
+对执行块 $b$，设三个线程维度的物理线程数分别为 $t_{b,x}$、$t_{b,y}$ 和 $t_{b,z}$，未使用的维度取 1，则每个线程块的线程数为
+\begin{equation}
+T_b=t_{b,x}t_{b,y}t_{b,z}.
+\label{eq:thread-count}
+\end{equation}
+根据目标设备的线程块容量与 warp 宽度，结合算子的并行规模，确定可接受的线程数区间：
+\begin{equation}
+L_b\le T_b\le U_b,\qquad U_b=T_{\max}.
+\label{eq:thread-range}
+\end{equation}
+其中，$T_{\max}$ 为设备允许的每块最大线程数；下限 $L_b$ 依据 warp 宽度确定，在并行规模充足时取一个 warp 的线程数，在较小计算规模下取 1。上限约束排除超出设备容量的配置，下限约束则限制并行规模充足时过小的线程配置。相关硬件参数及其作用见表~\ref{tab:target-attributes}。
+
+\begin{table*}[tb]
+\centering
+\caption{线程剪枝及后续验证使用的硬件参数}
+\label{tab:target-attributes}
+\small
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{@{}lp{0.07\textwidth}p{0.24\textwidth}p{0.30\textwidth}@{}}
+\toprule
+目标属性 & 符号 & 含义（单位） & 方法中的作用 \\
+\midrule
+\texttt{max\_threads\_per\_block} & $T_{\max}$ & 每个线程块的最大线程数（线程） & 确定线程数上限，排除超出设备容量的配置 \\
+\texttt{thread\_warp\_size} & $W_{\mathrm{warp}}$ & 每个 warp 的物理线程数（线程） & 结合并行规模确定线程数下限，并将 warp 级配置换算为物理线程数 \\
+\texttt{max\_shared\_memory\_per\_block} & $S_{\max}$ & 每个线程块的共享内存容量（字节） & 在后续低层验证中检查候选程序的实际共享内存用量 \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\paragraph{约束引导采样（CS）}
+CS 从调度 trace 中分析采样决策与线程绑定的依赖关系。循环切分产生线程维度的长度，循环融合使多个长度相乘，因此可将维度 $d$ 的线程数表示为
+\begin{equation}
+t_{b,d}=C_{b,d}\prod_{f\in F_{b,d}}f,
+\label{eq:thread-dim}
+\end{equation}
+其中 $C_{b,d}$ 是已知的常数部分，$F_{b,d}$ 是决定该维度长度的采样因子集合。该表示将线程约束转化为采样因子之间的约束，使候选无需完成回放即可接受检查。
+
+在每个待采样位置，CS 首先构造满足原始调度规则的决策域，再结合已经确定的决策，保留满足式~\eqref{eq:thread-range} 的选项。例如，循环切分仍须满足各因子乘积等于原循环长度；线程约束进一步限制其中用于线程绑定的因子。随后，CS 从保留的决策中采样，并用该结果继续回放。循环切分在可行因子向量中均匀采样，类别选择则保留可行选项之间的相对概率。算法~\ref{alg:cs} 给出这一过程。若可行域为空，则重新尝试生成候选；重试次数受预设上限限制。
+
+\paragraph{矩阵乘示例}
+考虑 $C=AB$，其中 $A,B\in\mathbb{R}^{128\times128}$。将输出行循环切分为 $(i_0,i_1,i_2)$，满足 $i_0i_1i_2=128$，并将长度为 $i_2$ 的循环绑定到 \texttt{threadIdx.x}。若 \texttt{threadIdx.y} 已固定为 32 个线程，且未使用 $z$ 维，则 $T_b=32i_2$。在 $T_{\max}=1024$、$W_{\mathrm{warp}}=32$ 的设备上，该计算的线程数范围为 $[32,1024]$，从而要求 $i_2\le32$。因子 $i_2=64$ 和 $i_2=128$ 分别产生 2048 和 4096 个线程，均被 CS 从待采样域中排除；其余切分仍须满足原有因子乘积与切分规则。这样，已知的线程绑定直接约束后续决策，避免生成两维分别可选、组合后却超出线程块上限的配置。
+
+\begin{algorithm}[!tb]
+\caption{Constraint-guided sampling (CS)}
+\label{alg:cs}
+\small
+\begin{algorithmic}[1]
+\Require Trace $\tau$ and hardware parameters $\mathcal{H}$
+\Ensure Replayed trace or a retry request
+\State $P\gets\Call{BuildConstraints}{\tau,\mathcal{H}}$
+\State Start replay with existing decisions fixed
+\For{each unresolved sampling point $s$}
+    \State $\pi\gets$ current replay prefix
+    \State $D_s\gets\Call{OriginalDomain}{s}$
+    \State $D_s^{+}\gets\Call{FilterDomain}{P,\pi,s,D_s}$
+    \If{$D_s^{+}$ cannot be determined}
+        \State $v\gets\Call{OriginalSample}{s}$
+    \ElsIf{$D_s^{+}=\varnothing$}
+        \State \Return \textsc{Retry}
+    \Else
+        \State $v\gets\Call{SampleFeasible}{D_s^{+},s}$
+    \EndIf
+    \State Record $v$ at $s$ and continue replay
+\EndFor
+\If{CS detects a thread-constraint violation}
+    \State \Return \textsc{Retry}
+\EndIf
+\State \Return replayed trace
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{分层硬筛（H）}
+初始化与进化变异得到的候选可能已携带完整决策，无法仅靠约束后续采样排除。H 因此在两个阶段检查候选。首先，在 trace 层将已有决策代入线程表达式，提前拒绝能够确定违反约束的候选，省去其回放与后处理开销。随后，对保留候选完成回放，并在 IR 层根据实际线程绑定重新检查，阻止违规候选进入后续验证与编译。两层检查分别利用调度决策和生成程序中的信息，使同一组线程约束覆盖候选构造的不同阶段。
+
+在上述矩阵乘示例中，若变异将 $i_2$ 改为 64，H 可在 trace 层根据 $32\times64>1024$ 直接拒绝该候选。CS 与 H 由此形成互补：前者限制新决策的取值，后者检查初始化及变异产生的已有决策。对于尚不能确定的线程配置，候选继续沿原流程接受检查；通过线程筛选的候选仍需完成原有后处理与 \texttt{VerifyGPUCode}，以验证共享内存等其他资源限制。
+
+\subsection{分级筛选：粗筛与精筛}
+剪枝减少了不可行候选，但进化搜索仍需在大量可行调度之间比较性能。若对每一代种群均调用学习代价模型，特征提取与预测便会反复作用于最终不会被测量的候选。Scout 采用两级评分：先用基于静态分析的 Draft 评分指导进化搜索，保留一组有潜力的候选，再由学习代价模型进行精筛，确定提交设备测量的方案。Draft 提供高频比较所需的低成本排序信号，学习代价模型则利用累积的实测反馈完成最终选拔。
+
+\paragraph{候选特征与硬件参数}
+Draft 采用 Pruner 的解析代价估计思路~\cite{pruner}，以完成回放和后处理的 S-TIR 为输入，从循环结构、缓冲区访问及线程绑定中提取候选特征。对候选 $c$，记其特征记录集合为 $\mathcal S(c)$。每条记录 $s$ 包含计算工作量 $W_s$、DRAM 访问量代理 $M_s$、数据复用因子 $R_s$、寄存器需求代理 $Q_s$，以及网格规模 $g_s$ 和块线程数 $t_s$。这些特征随切分、融合和线程映射等调度决策变化，用于刻画候选的工作量、数据访问与并行组织。
+
+硬件参数为上述特征提供统一的评价尺度。峰值算力 $P$ 与内存带宽 $B$ 分别确定计算和访存项的基准；SM 数量 $n_{\mathrm{SM}}$、warp 宽度 $W_{\mathrm{warp}}$、每 SM 活动块参考数 $a$ 及 SM 分区数 $p$ 用于估计并行利用率；寄存器参考容量 $Q_{\mathrm{cap}}$ 用于归一化寄存器压力。这些参数由目标设备描述及预设硬件配置提供，在同一设备的搜索过程中保持固定。表~\ref{tab:analytic-params} 列出了各项输入的含义及作用。
+
+\begin{table*}[tb]
+\centering
+\caption{Draft 评分使用的候选特征与硬件参数}
+\label{tab:analytic-params}
+\small
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.12}
+\begin{tabular}{@{}p{0.14\textwidth}p{0.27\textwidth}p{0.54\textwidth}@{}}
+\toprule
+符号 & 含义 & 提取依据或评分作用 \\
+\midrule
+\multicolumn{3}{@{}l}{\textbf{候选静态特征}} \\
+$W_s$ & 计算工作量 & 根据浮点运算、循环长度及线程映射估计，构成计算项的工作量输入 \\
+$M_s$ & DRAM 访问量代理 & 根据访存语句、循环索引及存储作用域估计，构成访存项的输入 \\
+$R_s$ & 数据复用因子 & 由线程内计算量与访问量的比例构造，用于修正数据复用对计算代价的影响 \\
+$Q_s$ & 寄存器需求代理 & 根据访问索引涉及的循环规模估计，与 $Q_{\mathrm{cap}}$ 比较以刻画寄存器压力 \\
+$g_s,\ t_s$ & 网格规模与块线程数 & 从物理线程绑定提取，用于估计调度波次、SM 并行度及 warp 填充程度 \\
+\midrule
+\multicolumn{3}{@{}l}{\textbf{硬件参数与参考配置}} \\
+$P,\ B$ & 峰值算力与内存带宽 & 分别为计算工作量与访存量提供代价换算基准 \\
+$n_{\mathrm{SM}}$ & SM 数量 & 确定设备可并行调度线程块的规模 \\
+$W_{\mathrm{warp}}$ & warp 宽度 & 将块线程数换算为 warp 数，并估计未填满 warp 的利用率损失 \\
+$a,\ p$ & 每 SM 活动块参考数与 SM 分区数 & 分别用于线程块调度容量和网格较小时的 SM 内并行度估计 \\
+$Q_{\mathrm{cap}}$ & 寄存器参考容量 & 作为寄存器需求代理的归一化尺度，用于修正有效计算吞吐率 \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\paragraph{Draft 解析评分}
+Draft 分别估计每条特征记录的计算代价与访存代价，并以二者中的较大值刻画主要瓶颈。为考虑调度对计算资源利用的影响，定义有效计算吞吐率
+\begin{equation}
+P_s^{\mathrm{eff}}=
+\frac{P\,\eta_s^{\mathrm{grid}}\eta_s^{\mathrm{warp}}}
+{\max(1,Q_s/Q_{\mathrm{cap}})}.
+\label{eq:draft-throughput}
+\end{equation}
+其中，$\eta_s^{\mathrm{grid}}$ 表示网格的并行利用率修正：当网格规模足以覆盖设备时，根据 $g_s$ 与 $n_{\mathrm{SM}}a$ 估计调度波次及末波填充程度；当网格较小时，则结合 $p$ 和每块 warp 数估计 SM 内的并行度。$\eta_s^{\mathrm{warp}}$ 表示已分配 warp 中有效线程所占的比例，由 $t_s$ 和 $W_{\mathrm{warp}}$ 确定。寄存器需求超过参考容量时，分母中的压力项降低有效吞吐率。
+
+计算时间估计 $\widehat t_s^{\mathrm{comp}}$ 以 $W_s/P_s^{\mathrm{eff}}$ 为基础，并乘以复用修正项 $1+1/R_s$；复用因子越大，该项带来的额外代价越小。访存时间估计 $\widehat t_s^{\mathrm{mem}}$ 则由 $M_s$ 和带宽 $B$ 换算得到。这里的访存量与寄存器需求来自静态分析，分别作为内存流量和寄存器压力的代理。完成相应的尺度与单位换算后，候选的总估计代价及 Draft 分数为
+\begin{equation}
+\begin{aligned}
+\widehat T(c)&=\sum_{s\in\mathcal S(c)}
+\max\!\left(\widehat t_s^{\mathrm{comp}},\widehat t_s^{\mathrm{mem}}\right),\\
+D(c)&=\frac{1}{\widehat T(c)}.
+\end{aligned}
+\label{eq:analytic}
+\end{equation}
+因此，较大的 $D(c)$ 表示较低的估计代价。Draft 无需利用测量样本训练，而是通过候选结构与固定硬件参数之间的关系比较调度方案。
+
+以 MatMul $128^3$ 为例，若每个线程块计算一个输出 tile，将 tile 从 $16\times16$ 增大到 $32\times32$，网格规模便从 64 个块减为 16 个块。两种方案的计算总量相同，但较大的 tile 会改变块内数据复用和寄存器需求，同时减少可并行调度的线程块。Draft 将这些变化共同纳入评分，使切分方案的比较同时考虑数据复用与并行利用率。
+
+\paragraph{Draft 引导的进化搜索}
+在每个搜索批次内，Scout 建立大小为 $N$ 的初始种群，并执行 $G$ 轮进化。初始种群及各代子代均由 Draft 评分，同代分数经归一化后用于父代抽样。GA 对选中的父代调度进行变异，子代经过第 3.1 节的 CS 与 H，以及原有回放、后处理和验证后进入下一代。若在有限重试内无法生成可行子代，则保留父代。对于无法获得 Draft 分数的候选，保留较小的非零抽样权重；若整代均无法评分，则采用均匀抽样。
+
+为保留早期种群中出现的优质候选，搜索同时维护跨代候选池 $A$。设本批次的测量名额为 $n$、精筛比例为 $\rho$，候选池容量为
+\begin{equation}
+K=\max\!\left(n,\lceil\rho N\rceil\right).
+\label{eq:graded-pool}
+\end{equation}
+每代评分后，候选池剔除重复及已经测量的候选，并按原始 Draft 分数保留至多 $K$ 个候选，已知分数优先于未知分数。使用未经代内归一化的分数，可以使不同代的候选在同一尺度下比较。候选池在每个搜索批次开始时重新建立，其保留范围覆盖该批次的全部进化代。
+
+\paragraph{代价模型精筛与测量反馈}
+进化结束后，学习代价模型对候选池统一评分，按照预测性能排列候选，并选取排名靠前的至多 $n$ 个方案进行编译和设备测量。Draft 决定进入精筛的候选范围，学习代价模型确定其测量顺序，并在候选数多于测量名额时完成最终选拔。
+
+测量结果写入调优数据库，并作为新增反馈更新学习代价模型。对于每个算子的调优过程，模型在不同搜索批次之间持续积累历史数据，后续精筛由更新后的模型完成。因此，静态分析负责进化过程中的候选比较，实测反馈通过学习代价模型影响后续批次的最终选择。算法~\ref{alg:graded} 给出了单个搜索批次的完整流程。
+
+\begin{algorithm}[!tb]
+\caption{Draft-guided candidate selection}
+\label{alg:graded}
+\footnotesize
+\begin{algorithmic}[1]
+\Require Valid population $\mathcal P_0$; $N,G,\rho,n$
+\Require Cost model $\mathcal M$; measurement history $\mathcal D$
+\Ensure Selected candidates $C$ and outcomes $Y$
+\State $K\gets\max(n,\lceil\rho N\rceil)$; $A\gets\varnothing$
+\For{$g=0,\ldots,G$}
+    \State $D_g\gets\Call{DraftScore}{\mathcal P_g}$
+    \State $A\gets\Call{UpdateArchive}{A,\mathcal P_g,D_g,\mathcal D,K}$
+    \If{$g<G$}
+        \State $F_g\gets\Call{NormalizeFitness}{D_g}$
+        \State $\mathcal P_{g+1}\gets\varnothing$
+        \While{$|\mathcal P_{g+1}|<N$}
+            \State $p\gets\Call{SampleParent}{\mathcal P_g,F_g}$
+            \State $\tau\gets\Call{Mutate}{\operatorname{Trace}(p)}$
+            \State $c\gets\Call{ReplayAndVerify}{\tau,\mathrm{CS},\mathrm{H}}$
+            \State Add valid $c$ to $\mathcal P_{g+1}$;
+            \Statex \hspace{\algorithmicindent}\hspace{\algorithmicindent}\hspace{\algorithmicindent} otherwise retry or retain $p$
+        \EndWhile
+    \EndIf
+\EndFor
+\State $q\gets\Call{CostModelScore}{\mathcal M,A}$
+\State $C\gets\Call{TopCandidates}{A,q,n}$
+\State $Y\gets\Call{BuildAndMeasure}{C}$
+\State \Call{UpdateHistoryAndModel}{$\mathcal D,\mathcal M,C,Y$}
+\State \Return $C,Y$
+\end{algorithmic}
+\end{algorithm}
+
+\FloatBarrier
+\input{sections/single_seed_experiments.tex}
+
+\section{讨论与相关工作}
+\label{sec:related}
+Ansor 与 MetaSchedule 分别提供自动搜索框架和基于概率程序的调度空间表达~\cite{ansor,metaschedule}。与将搜索空间整体重构为约束满足问题的 Heron~\cite{heron} 不同，本文以 retrofit 方式在现有 MetaSchedule 流程中注入约束判定，不重建调度空间。本文利用已有线程契约前移判定，不声称所有既有系统均未处理可行性。Pruner 是粗筛（解析评分）组件的直接方法来源~\cite{pruner}；本地集成关注其在现有约束搜索路径下的成本与质量，不能与论文中不同硬件结果直接计算加速比。
+
+当前有四项主要局限。第一，线程规则仅在支持结构上可证明，且相对于基线契约而非无约束硬件空间安全；固定池已覆盖两个有限提案池的提前拒绝 oracle，但未覆盖完整线上轨迹、全部未知结构或其他 shape。第二，单个搜索 seed、每臂 32 次提交不足以证明统计显著性；独立重测为技术重复而非独立搜索样本，最小延迟仍受测量噪声与选择偏差影响。第三，固定池诊断已区分首个失败类别并定位软件流水线 pass，但尚未获得跨形状的安全提前判据；pass 观察时间有嵌套与诊断开销，不能代替正式互斥阶段计时，scheduler 时间也不能冒充完整墙钟。第四，主对照只有单设备、单 seed，模型级（ResNet-18）与更大预算、更多 seed 的实验不完整。
+
+下一阶段在已完成的首因诊断和反事实基础上，区分安全资源剪枝、结构修复与异常快速返回，选择具有证明依据和净收益的前移约束；同时扩展配对 seed 和 32/64 次提交预算，再补标准 Conv2D 与较大 Reduction 对照。正式比较同时报告提交数、finite 数与 Tune 墙钟，候选特有编译失败仍占预算，不只发表全成功运行。目标性能提前固定，未达标运行保留删失信息。双信号通过离线验证后才加入完整在线矩阵。
+
+\subsection{未来工作：绝对排名与父子相对改进}
+\label{sec:hypothesis}
+本小节是\emph{待实现和验证的研究方案}，不是现有实验证明的贡献。动机是限制单一粗筛偏差在进化和归档中的累积，同时保留低成本评分路径。
+
+对于真实父子关系 $(p,c)$，若原始分数均已知、为正且定义可比，计划引入
+\begin{equation}
+\Delta_D(p,c)=\log\frac{D(c)+\epsilon}{D(p)+\epsilon},\qquad \epsilon>0.
+\end{equation}
+绝对分数描述候选本身的预计质量，相对变化描述一次变异的预计改进。不能使用每代独立归一化后的分数计算比值，也不能按 tile 相似性捏造父子谱系。$\Delta_D$ 来自同一个粗筛分数，并非新增实测信息，可能继承其偏差。
+
+拟将固定归档名额分为绝对精英、不同父代或结构组的相对改进候选、随机探索三类。先保留结构多样性对照，再判断相对信号是否提供额外信息。低粗筛分数或 unknown 不作为合法性硬拒；首版每次变异只产生一个子代，不通过大量分支 replay 选择方向；GA 内不调用 XGBoost。
+
+需要注意，对于同一父代 $p$，$\log(D(p)+\epsilon)$ 为常数，按 $\Delta_D(p,c)$ 排序与按 $D(c)$ 排序完全相同。因此必须加入“相同父组配额加子代绝对分数”和“相同父组配额加随机子代”两个对照，先检查入选集合是否实际改变。若组内固定配额下集合相同，不能将收益归因为相对打分的独立信息；跨父组分配改变时还需检验对低分父代的偏好。
+
+验证顺序为：采集完整谱系与候选池；在独立划分上检验 $\Delta_D$ 与真实 $\log(L(p)/L(c))$ 的相关性和改进方向一致率；比较随机、绝对排名、绝对排名加多样性、绝对排名加相对信号及完整组合。先报告池内 Recall@K、regret、覆盖率和新增开销，通过后才开展在线配对。当前不能声称该方案已改善质量、已经避免额外 replay 或具有未经文献核验的独立新颖性。
+
+\section{结论}
+本文实现并评估 MetaSchedule 中的剪枝与分级筛选。在 CUDA sm\_86 的 MatMul128/256、标准卷积与大归约上，剪枝（CS+H）减少了无效候选生成，分级筛选降低了学习模型的评分工作量，但完整调优时间的降幅均不足 1%，且除大归约外未呈现一致的质量优势。这说明减少内部搜索工作能否改善实际调优，取决于评分偏差与编译成本所占的比例。后续重点是提高可证明约束的前移覆盖、在固定工作量下检验净成本，并完成 ResNet-18 模型级验证，而非预设加速结论。
+
+\appendix
+\input{sections/appendix_measurements.tex}
+\input{sections/appendix_fixed_pool.tex}
+\input{sections/appendix_artifacts.tex}
+
+\begin{thebibliography}{9}
+\raggedright
+% GB/T 7714 格式；投稿前从 DOI 复核作者列表与页码。
+\bibitem{halide}
+RAGAN-KELLEY J, BARNES C, ADAMS A, et al. Halide: A Language and Compiler for Optimizing Parallelism, Locality, and Recomputation in Image Processing Pipelines[C]//Proceedings of the 34th ACM SIGPLAN Conference on Programming Language Design and Implementation (PLDI'13). 2013: 519--530.
+
+\bibitem{tvm}
+CHEN T, MOREAU T, JIANG Z, et al. TVM: An Automated End-to-End Optimizing Compiler for Deep Learning[C]//Proceedings of the 13th USENIX Symposium on Operating Systems Design and Implementation (OSDI'18). 2018: 578--594.
+
+\bibitem{tiramisu}
+BAGHDADI R, RAY J, ROMMEL M B, et al. Tiramisu: A Polyhedral Compiler for Expressing Fast and Portable Code[C]//Proceedings of the 2019 IEEE/ACM International Symposium on Code Generation and Optimization (CGO'19). 2019: 193--205.
+
+\bibitem{triton}
+TILLET P, KUNG H T, COX D. Triton: An Intermediate Language and Compiler for Tiled Neural Network Computations[C]//Proceedings of the 3rd ACM SIGPLAN International Workshop on Machine Learning and Programming Languages (MAPL'19). 2019: 10--19.
+
+\bibitem{ansor}
+ZHENG L, JIA C, SUN M, et al. Ansor: Generating High-Performance Tensor Programs for Deep Learning[C]//Proceedings of the 14th USENIX Symposium on Operating Systems Design and Implementation (OSDI'20). 2020: 863--879.
+
+\bibitem{metaschedule}
+SHAO J, ZHOU X, FENG S, et al. Tensor Program Optimization with Probabilistic Programs[C]//Advances in Neural Information Processing Systems 35 (NeurIPS'22). 2022: 35783--35796.
+
+\bibitem{pruner}
+QIAO L, SHI J, HAO X, et al. Pruner: A Draft-then-Verify Exploration Mechanism to Accelerate Tensor Program Tuning[C]//Proceedings of the 30th ACM International Conference on Architectural Support for Programming Languages and Operating Systems (ASPLOS'25), Volume 2. 2025: 949--965. DOI:10.1145/3676641.3716269.
+
+\bibitem{heron}
+BI J, GUO Q, LI X, et al. Heron: Automatically Constrained High-Performance Library Generation for Deep Learning Accelerators[C]//Proceedings of the 28th ACM International Conference on Architectural Support for Programming Languages and Operating Systems (ASPLOS'23), Volume 3. 2023: 314--328.
+\end{thebibliography}
+\end{document}

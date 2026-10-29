@@ -1,0 +1,49 @@
+\section{数据与复现实验索引}
+\raggedright
+本批主实验协议和原始结果位于\\
+\path{experiments/results/paper_v1/single_seed_20261010/}。
+其中 \path{protocol.json} 冻结 seed、版本、开关、顺序、预算及阈值；各运行目录保存数据库、\path{result.json}、逐批计时与数值检查，\path{retiming/} 保存固定原赢家重测和退出诊断。完成情况与原始记录索引见该目录中的 \path{COMPLETION.json}。
+
+汇总数值和输入/输出哈希分别见\\
+\path{papers/figures/single_seed_20261010/summary.json}、\\
+\path{papers/figures/single_seed_20261010/manifest.json}。\\
+论文图及其输入哈希见\\
+\path{papers/figures/single_seed_paper_20261010/manifest.json}。\\
+执行、独立重测和分析脚本分别为\\
+\path{experiments/run_single_seed_study.py}、\\
+\path{experiments/remeasure_top1.py} 与\\
+\path{experiments/report_single_seed_study.py}。
+
+
+
+历史 16 次提交 pilot 的执行计划见\\
+\path{experiments/EXPERIMENT_PLAN_20261008.md}。
+这些历史结果使用不同版本，仅作补充，不合并为本批搜索重复；目录如下：
+\begin{itemize}[leftmargin=1.6em]
+\item \path{experiments/results/paper_v1/e8_convergence_small/seed20260931/}
+\item \path{experiments/results/paper_v1/e10_seedpair/seed20260932/}
+\end{itemize}
+历史诊断保存在 \path{experiments/results/paper_v1/} 下：
+\begin{itemize}[leftmargin=1.6em]
+\item 安全性：\path{e1_cs_safety/database_audit.json}。
+\item 排序质量：\path{e2_topk_recall/} 目录中的\\
+\path{pruner_draft_topk_v1_1_p1_trained.json}。
+\end{itemize}
+成图输入、哈希与计时口径见 \path{papers/figures/pilot_20261008/manifest.json}。这些本地路径用于研究复现，不代替最终投稿需要的公开 artifact 地址。
+
+固定池记录位于以下目录：\\
+\path{experiments/results/paper_v1/p1_fixed_pool/}。
+
+其中 \path{pilot01/}、\path{pilot02/} 保存完整池与逐条评估，
+\path{pilot01_replay01/} 保存独立进程复评。驱动分别为
+\path{experiments/fixed_trace_pool.py} 与 \path{experiments/replay_fixed_trace_pool.py}；
+图和成本分区的 manifest 位于 \path{papers/figures/p1_fixed_pool/} 下对应池目录。
+
+成本分组补充图及原始输入哈希见\\
+\path{papers/figures/pilot_mechanism_20261008/manifest.json}。
+诊断接口构建、测试、原池一致性检查和 pass 轨迹位于\\
+\path{experiments/results/paper_v1/p1_verify_diagnostics/}。
+
+诊断脚本为\\
+\path{experiments/diagnose_fixed_trace_pool.py}。
+

@@ -1,0 +1,16 @@
+\section{测量细节与附表}
+\label{sec:measurement-details}
+本批实验统一使用 TVM \texttt{0.26.dev90}、CUDA 12.6 与 \texttt{sm\_86} 目标，平台为 RTX 3050 Ti Laptop GPU（4 GiB）。搜索 seed 固定为 20261011，每臂 32 submitted、批大小 4、种群 32、探索比例 0.1；MatMul128 分别设置 1 与 4 代 GA，其余为 1 代。代价模型为 XGBoost、warmup 0；D 的入围比例 \texttt{verify\_ratio}=0.25。每个候选在计时前通过独立缓冲的数值检查（与 NumPy FP64 参考比对，rtol=atol=$2\times10^{-4}$）；完整调优时间从 Tune 开始到返回，含 search、builder、runner 与 callback，准备时间单列。
+
+15 次运行、480 次提交均获得有限且数值正确的测量。Windows 上完成测量后的进程退出异常通过 worker 规避处理，未宣称根因修复。表~\ref{tab:single-primary} 报告生成/Verify 与时间，表~\ref{tab:single-ga} 报告 GA 密度下的评分开销，表~\ref{tab:single-targets} 报告全部目标阈值；图~\ref{fig:single-retiming} 给出原 top-1 独立重测的完整分布。
+
+\input{tables/single_seed_primary_20261010.tex}
+\input{tables/single_seed_ga_20261010.tex}
+\input{tables/single_seed_targets_20261010.tex}
+
+\begin{figure*}[tb]
+\centering
+\includegraphics[width=\linewidth]{figures/single_seed_paper_20261010/f5_independent_top1.pdf}
+\caption{原 top-1 候选的独立重测延迟分布。每臂 30 个技术重复，中位数用于主文比较；技术重复不增加独立搜索 seed。}
+\label{fig:single-retiming}
+\end{figure*}
